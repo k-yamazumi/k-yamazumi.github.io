@@ -257,9 +257,46 @@ html, body{
 
 .settings{
   min-height: 100vh;
-  background: var(--ui-bg);
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(1200px 800px at 18% -10%, rgba(230,0,18,.22), rgba(230,0,18,0) 62%),
+    radial-gradient(900px 640px at 88% 12%, rgba(255,212,0,.08), rgba(255,212,0,0) 55%),
+    linear-gradient(180deg, rgba(255,255,255,.035), rgba(0,0,0,.20) 35%, rgba(0,0,0,.40));
+  background-color: var(--ui-bg);
+  background-attachment: fixed;
   padding: 18px;
   color: var(--ink);
+}
+
+.settings::before{
+  content:"";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.055) 0 1px, transparent 1px 84px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, transparent 1px 84px),
+    repeating-linear-gradient(135deg, rgba(230,0,18,.09) 0 2px, transparent 2px 26px);
+  opacity: .22;
+}
+
+.settings::after{
+  content:"";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(180deg, rgba(255,255,255,.03) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(135deg, rgba(255,212,0,.06) 0 10px, transparent 10px 22px);
+  opacity: .18;
+}
+
+.settings > *{
+  position: relative;
+  z-index: 1;
 }
 
 .settings__header{
@@ -269,7 +306,7 @@ html, body{
 
 .settings__title{
   margin: 0;
-  font-size: 28px;
+  font-size: 35px;
   font-weight: 900;
 }
 
