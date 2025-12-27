@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Overlay Settings</title>
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    :root{
+      --font-ui: var(--font-clock-sub);
+    }
+
+    .settings{
+      height: 100vh;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  </style>
+</head>
+
+<body data-page="settings">
+  <div class="settings">
+    <header class="settings__header">
+      <h1 class="settings__title">オーバーレイ設定</h1>
+      <div class="settings__sub">URLを作ってOBSで読み込み</div>
+    </header>
+
+    <!-- 時計 -->
+    <section class="card">
+      <div class="card__head">
+        <div class="card__title">時刻</div>
+        <label class="switch">
+          <input id="s_timeOn" type="checkbox" />
+          <span class="switch__ui"></span>
+        </label>
+      </div>
+
+      <div id="s_timeBody" class="card__body">
+        <div class="row">
+          <label class="chk"><input id="s_timeDate" type="checkbox" />日付</label>
+          <label class="chk"><input id="s_timeDow" type="checkbox" />曜日</label>
+          <label class="chk"><input id="s_timeSec" type="checkbox" />秒</label>
+          <label class="chk"><input id="s_time24h" type="checkbox" />24時間表示</label>
+        </div>
+      </div>
+    </section>
+
+    <!-- 地震 -->
+    <section class="card">
+      <div class="card__head">
+        <div class="card__title">地震速報</div>
+        <label class="switch">
+          <input id="s_quakeOn" type="checkbox" />
+          <span class="switch__ui"></span>
+        </label>
+      </div>
+
+      <div id="s_quakeBody" class="card__body">
+        <div class="grid2">
+          <label class="field">
+            <span class="field__label">表示する震度（以上）</span>
+            <select id="s_quakeMinScale" class="input">
+              <option value="10">震度1</option>
+              <option value="20">震度2</option>
+              <option value="30">震度3</option>
+              <option value="40">震度4</option>
+              <option value="45">震度5弱</option>
+              <option value="50">震度5強</option>
+              <option value="55">震度6弱</option>
+              <option value="60">震度6強</option>
+              <option value="70">震度7</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field__label">1ページの表示秒数</span>
+            <input id="s_quakePageSec" class="input" type="number" min="1" max="60" />
+          </label>
+
+          <label class="field">
+            <span class="field__label">1ページの最大件数</span>
+            <input id="s_quakePerPage" class="input" type="number" min="4" max="60" />
+          </label>
+
+          <label class="field">
+            <span class="field__label">更新チェック間隔（秒）</span>
+            <input id="s_quakePollSec" class="input" type="number" min="10" max="120" />
+          </label>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="field__label">対象の都道府県</div>
+        <div class="pref-actions">
+          <button id="btnPrefAll" class="btn btn--ghost" type="button">すべて選ぶ</button>
+          <button id="btnPrefNone" class="btn btn--ghost" type="button">すべて外す</button>
+          <div id="prefCount" class="muted"></div>
+        </div>
+
+        <div id="prefList" class="pref-list"></div>
+
+        <div class="divider"></div>
+
+        <div class="grid2">
+          <div class="field">
+            <span class="field__label">音レベル1 閾値</span>
+            <select id="s_eqSound1Min" class="input">
+              <option value="0">鳴らさない</option>
+              <option value="10">震度1</option>
+              <option value="20">震度2</option>
+              <option value="30">震度3</option>
+              <option value="40">震度4</option>
+              <option value="45">震度5弱</option>
+              <option value="50">震度5強</option>
+              <option value="55">震度6弱</option>
+              <option value="60">震度6強</option>
+              <option value="70">震度7</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <span class="field__label">音レベル1 回数</span>
+            <input id="s_eqSound1Repeat" class="input" type="number" min="0" max="5" />
+          </div>
+
+          <div class="field">
+            <span class="field__label">音レベル2 閾値</span>
+            <select id="s_eqSound2Min" class="input">
+              <option value="0">鳴らさない</option>
+              <option value="10">震度1</option>
+              <option value="20">震度2</option>
+              <option value="30">震度3</option>
+              <option value="40">震度4</option>
+              <option value="45">震度5弱</option>
+              <option value="50">震度5強</option>
+              <option value="55">震度6弱</option>
+              <option value="60">震度6強</option>
+              <option value="70">震度7</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <span class="field__label">音レベル2 回数</span>
+            <input id="s_eqSound2Repeat" class="input" type="number" min="0" max="5" />
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="btnPreviewSound1" class="btn" type="button">音レベル1 試聴</button>
+          <button id="btnPreviewSound2" class="btn btn--danger" type="button">音レベル2 試聴</button>
+          <div id="soundWarn" class="warn" style="display:none;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ニュース -->
+    <section class="card">
+      <div class="card__head">
+        <div class="card__title">ニュース</div>
+        <label class="switch">
+          <input id="s_newsOn" type="checkbox" />
+          <span class="switch__ui"></span>
+        </label>
+      </div>
+
+      <div id="s_newsBody" class="card__body">
+        <label class="field">
+          <span class="field__label">RSS</span>
+          <input id="s_newsRss" class="input" type="url" />
+        </label>
+
+        <div class="grid2">
+          <label class="field">
+            <span class="field__label">新しさ（時間以内）</span>
+            <input id="s_newsAgeValue" class="input" type="number" min="1" max="365" />
+          </label>
+
+          <label class="field">
+            <span class="field__label">流れる速さ</span>
+            <input id="s_newsSpeed" class="input" type="number" min="40" max="900" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="field__label">表示しない単語（改行ごとに1つ）</span>
+          <textarea id="s_newsExclude" class="input" rows="4"></textarea>
+        </label>
+      </div>
+    </section>
+
+    <!-- URLコピー -->
+    <div class="actions">
+      <button id="btnBuild" class="btn btn--primary" type="button">URLをコピー</button>
+    </div>
+
+    <!-- 詳細 -->
+    <div class="details-wrap">
+      <button id="btnToggleDetails" class="btn btn--ghost btn--wide" type="button">詳細設定を開く</button>
+
+      <section id="detailsArea" class="card" style="display:none;">
+        <div class="card__head">
+          <div class="card__title">詳細設定</div>
+        </div>
+
+        <div class="card__body">
+          <div class="grid2">
+            <label class="field">
+              <span class="field__label">CORS（ニュース）</span>
+              <input id="s_newsProxy" class="input" type="text" />
+            </label>
+
+            <label class="field">
+              <span class="field__label">CORS（地震）</span>
+              <input id="s_quakeProxy" class="input" type="text" placeholder="空欄OK（通常不要）" />
+            </label>
+          </div>
+
+          <div class="divider"></div>
+
+          <label class="field">
+            <span class="field__label">現在のURL</span>
+            <input id="outUrl" class="input" type="text" readonly />
+          </label>
+
+          <div class="row">
+            <button id="btnQuakeDevTest" class="btn btn--danger" type="button">地震表示テスト</button>
+          </div>
+
+          <div class="muted">※ 地震表示テストは「今の設定」でサンドボックス用URLをコピーします（サンドボックスは約30秒周期で配信）</div>
+        </div>
+      </section>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="./script.js"></script>
+</body>
+</html>

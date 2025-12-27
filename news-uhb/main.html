@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="cache-control" content="no-cache" />
+  <title>OBS Overlay</title>
+
+  <!-- Optional web fonts (works on GitHub Pages / OBS Browser Source with internet) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Kosugi+Maru&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body data-page="overlay">
+  <!-- Transparent background for OBS -->
+  <div id="hud">
+    <!-- Top-left clock (Mintele-like: simple text w/ stroke) -->
+    <section id="clock" class="clock" aria-label="clock">
+      <div class="clock__time" id="clockTime">--:--</div>
+      <div class="clock__date" id="clockDate" style="margin-top: 8px;"></div>
+    </section>
+
+    <!-- Earthquake alert -->
+    <section id="quake" class="quake" aria-live="polite" aria-atomic="true">
+      <div class="quake__panel">
+        <div class="quake__top">
+          <div class="quake__title">地震速報（気象庁）</div>
+        </div>
+        <div class="quake__body">
+          <div class="quake__headline" id="quakeHeadline">震度 --</div>
+          <div class="quake__detail" id="quakeDetail">----</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom ticker -->
+    <section id="ticker" class="ticker" aria-label="news ticker">
+      <div class="ticker__label">NEWS</div>
+      <div class="ticker__viewport">
+        <div class="ticker__track" id="tickerTrack">
+          <span class="ticker__content" id="tickerContent">Loading…</span>
+          <span class="ticker__spacer">　　◆　　</span>
+          <span class="ticker__content" id="tickerContent2">Loading…</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TEST MODE badge -->
+    <div id="testMode" class="test-mode" aria-hidden="true">テストモード</div>
+
+    <!-- Small status -->
+    <div id="status" class="status"></div>
+  </div>
+
+  <script src="./script.js" defer></script>
+</body>
+</html>
