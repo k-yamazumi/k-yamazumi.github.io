@@ -6,7 +6,7 @@
   // =========================================================
   const STORAGE_KEY = 'obs_overlay_settings_v2';
 
-  const PROD_QUAKE_API = 'https://api-v2.p2pquake.net/v2';
+  const PROD_QUAKE_API = 'https://api.p2pquake.net/v2';
   const SANDBOX_QUAKE_API = 'https://api-v2-sandbox.p2pquake.net/v2';
 
   // MP3のファイルパス
@@ -14,14 +14,14 @@
   const SOUND_LV2_SRC = './sound/Alert02.mp3';
 
   const PREFS = [
-    '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
-    '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
-    '新潟県','富山県','石川県','福井県','山梨県','長野県',
-    '岐阜県','静岡県','愛知県','三重県',
-    '滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県',
-    '鳥取県','島根県','岡山県','広島県','山口県',
-    '徳島県','香川県','愛媛県','高知県',
-    '福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県',
+    '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
+    '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県',
+    '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県',
+    '岐阜県', '静岡県', '愛知県', '三重県',
+    '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県',
+    '鳥取県', '島根県', '岡山県', '広島県', '山口県',
+    '徳島県', '香川県', '愛媛県', '高知県',
+    '福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県',
     '沖縄県'
   ];
 
@@ -47,7 +47,7 @@
     sound1Min: 30,
     sound1Repeat: 1,
     sound2Min: 50,
-    sound2Repeat: 2,
+    sound2Repeat: 1,
 
     // news
     newsOn: true,
@@ -68,7 +68,7 @@
   // settingsページの「初期入力値」（更新でここに戻す）
   // ※ overlay側のフォールバックとは別枠で管理
   const SETTINGS_INITIAL = {
-    newsRss: 'https://news.yahoo.co.jp/rss/media/hokkaibun/all.xml',
+    newsRss: 'https://uhb.jp/news/data/lnf.xml',
     newsProxy: 'https://api.allorigins.win/raw?url=',
     newsSpeed: 90,
     quakeProxy: ''
@@ -750,10 +750,11 @@
       if (!Number.isFinite(full) || full <= 0) return;
 
       const distance = full / 2; // px
-      const speed = clamp(toInt(cfg.newsSpeed, DEFAULTS.newsSpeed), 40, 900); // px/sec
-      let durationSec = distance / speed;
+      const speed = clamp(toInt(cfg.newsSpeed, DEFAULTS.newsSpeed), 1, 900); // px/sec
 
-      durationSec = clamp(durationSec, 18, 240);
+      let durationSec = distance / speed;
+      durationSec = clamp(durationSec, 1, 30000);
+
       tickerTrackEl.style.animationDuration = `${durationSec}s`;
       tickerTrackEl.style.animationPlayState = 'running';
     };
