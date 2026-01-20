@@ -44,9 +44,9 @@
     // earthquake
     quakeOn: true,
     quakeMinScale: 30,
-    quakePageSec: 5,
+    quakePageSec: 4,
     quakePerPage: 9,
-    quakePollSec: 20,
+    quakePollSec: 30,
     quakePrefs: PREFS.slice(),
     quakeProxy: '',
 
@@ -913,6 +913,7 @@
             return { title, pubMs };
           })
           .filter((x) => x.title)
+          .filter((x) => x.title !== '削除しました')
           .filter((x) => (!Number.isFinite(x.pubMs) ? true : (nowMs - x.pubMs <= ageMs)))
           .filter((x) => (excludeWords.length === 0 ? true : !excludeWords.some((w) => x.title.includes(w))))
           .slice(0, 50)
@@ -944,19 +945,49 @@
           .filter(Boolean);
 
         let retryTimer = null;
-        let finished = false;
+        let nextUpdateTimer = null;
+        let nextText = null; // 次に表示するテキスト（待機中）
+        let currentText = '';
 
-        const scheduleRetry = () => {
-          if (finished) return;
-          if (retryTimer) clearTimeout(retryTimer);
-          retryTimer = setTimeout(tryFetchOnce, NEWS_RETRY_SEC * 1000);
+        // 1時間おきに更新
+        const UPDATE_INTERVAL_MS = 60 * 60 * 1000;
+
+        const applyText = async (text) => {
+          log.info('ニュース更新内容:', text);
+          currentText = text;
+          tickerContentEl.textContent = text;
+          ensureTickerLoop();
+          setDisplay(tickerEl, true);
+
+          // フォントやレイアウト確定後に速度計算
+          await new Promise((r) => requestAnimationFrame(r));
+          await new Promise((r) => requestAnimationFrame(r));
+
+          if (document.fonts && document.fonts.ready) {
+            try {
+              await Promise.race([document.fonts.ready, sleep(1200)]);
+            } catch {
+              // ignore
+            }
+          }
+
+          // 再起動で反映
+          restartTickerAnimation();
+          setTimeout(restartTickerAnimation, 1500);
         };
 
-        const tryFetchOnce = async () => {
-          if (finished) return;
+        // アニメーションループの切れ目でテキストを更新する
+        tickerTrackEl.addEventListener('animationiteration', () => {
+          if (nextText && nextText !== currentText) {
+            log.info('ニュース更新: ループの切れ目でテキストを差し替えます');
+            applyText(nextText);
+            nextText = null;
+          }
+        });
 
+        const fetchNews = async () => {
           const now = Date.now();
-          log.info('ニュース取得を試行:', { fetchUrl, retrySec: NEWS_RETRY_SEC });
+          log.info('ニュース取得を試行:', { fetchUrl });
 
           try {
             const res = await fetch(fetchUrl, { cache: 'no-store' });
@@ -969,49 +1000,46 @@
               ? '(ニュースが配信されるとここに表示されます)'
               : titles.join('　◆　');
 
-            // 成功したので表示する
-            tickerContentEl.textContent = text;
-            tickerContent2El.textContent = text;
-            setDisplay(tickerEl, true);
+            log.info('ニュース取得に成功');
 
-            // フォントやレイアウト確定後に速度計算（OBS/CEFは遅れることがある）
-            await new Promise((r) => requestAnimationFrame(r));
-            await new Promise((r) => requestAnimationFrame(r));
-
-            if (document.fonts && document.fonts.ready) {
-              try {
-                await Promise.race([document.fonts.ready, sleep(1200)]);
-              } catch {
-                // ここは無視して OK
-              }
+            // 初回表示 or 表示中なら nextText にセットして更新待ち
+            if (!currentText) {
+              // 初回は即時適用
+              log.info('ニュース初回表示');
+              applyText(text);
+            } else if (text !== currentText) {
+              // 変更がある場合のみ更新予約
+              log.info('ニュース更新予約: 次のループで適用します');
+              nextText = text;
+            } else {
+              log.info('ニュース変更なし');
             }
 
-            // 再起動で反映
-            restartTickerAnimation();
-            setTimeout(restartTickerAnimation, 1500);
-            setTimeout(restartTickerAnimation, 3500);
+            // 次回更新予約 (1時間後)
+            if (nextUpdateTimer) clearTimeout(nextUpdateTimer);
+            nextUpdateTimer = setTimeout(fetchNews, UPDATE_INTERVAL_MS);
 
-            window.addEventListener('resize', () => {
-              if (tickerEl.style.display !== 'none') restartTickerAnimation();
-            });
-
-            finished = true;
+            // リトライタイマーがあればクリア
             if (retryTimer) clearTimeout(retryTimer);
             retryTimer = null;
 
-            log.info('ニュース取得に成功（表示開始）');
           } catch (e) {
             log.warn('ニュース取得に失敗。再試行します:', e);
-            setStatus(`news: error ${String(e)}`);
-            setDisplay(tickerEl, false);
-            tickerContentEl.textContent = '';
-            tickerContent2El.textContent = '';
-            scheduleRetry();
+
+            // 初回失敗時のみエラー表示（裏で更新中の失敗は無視してリトライ）
+            if (!currentText) {
+              setStatus(`news: error ${String(e)}`);
+              setDisplay(tickerEl, false);
+            }
+
+            // リトライ予約 (30秒後)
+            if (retryTimer) clearTimeout(retryTimer);
+            retryTimer = setTimeout(fetchNews, NEWS_RETRY_SEC * 1000);
           }
         };
 
         // 初回実行
-        tryFetchOnce();
+        fetchNews();
       };
 
       initTicker();
@@ -1044,6 +1072,9 @@
         const eq = ev.earthquake || {};
         const maxScale = toInt(eq.maxScale, 0);
 
+        // 震度不明(--)なら表示しない
+        if (scaleLabel(maxScale) === '--') return { pages: [], maxScale };
+
         if (maxScale < cfg.quakeMinScale) return { pages: [], maxScale };
 
         const selected = new Set(cfg.quakePrefs || []);
@@ -1051,7 +1082,8 @@
         const filtered = points
           .filter((p) => p && typeof p === 'object')
           .filter((p) => selected.size === 0 || selected.has(p.pref))
-          .filter((p) => toInt(p.scale, 0) >= cfg.quakeMinScale);
+          .filter((p) => toInt(p.scale, 0) >= cfg.quakeMinScale)
+          .filter((p) => scaleLabel(toInt(p.scale, 0)) !== '--');
 
         if (filtered.length === 0) return { pages: [], maxScale };
 
@@ -1251,6 +1283,18 @@
             return;
           }
 
+          // 30分以上前の情報は表示しない
+          const evtTimeStr = ev.earthquake?.time || ev.time;
+          if (evtTimeStr) {
+            const evtTime = Date.parse(evtTimeStr);
+            // 30分 = 30 * 60 * 1000 ms
+            if (Number.isFinite(evtTime) && (Date.now() - evtTime > 30 * 60 * 1000)) {
+              quakeVisible(false);
+              setStatus('quake: too old (ignored)');
+              return;
+            }
+          }
+
           const sig = makeEventSig(ev);
           if (sig === lastEventSig) {
             setStatus('quake: no change');
@@ -1266,6 +1310,12 @@
           }
 
           setStatus(`quake: show pages=${pages.length} maxScale=${maxScale}`);
+
+          // ログ出力
+          pages.forEach((p, i) => {
+            log.info(`地震情報表示 [${i + 1}/${pages.length}]`, { headline: p.headline, detail: p.detail });
+          });
+
           showToken += 1;
           await showPages(pages, maxScale);
         } catch (e) {
