@@ -201,7 +201,8 @@ html, body{
   white-space: nowrap;
   will-change: transform;
   animation: tickerMove linear infinite;
-  animation-duration: 40s;
+  /* animation-duration: 40s; */
+  /* ※animation-duration は JS で設定 */
 }
 
 .ticker__content,

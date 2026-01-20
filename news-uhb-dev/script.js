@@ -7,7 +7,7 @@
   const STORAGE_KEY = 'obs_overlay_settings_v2';
 
   const API = Object.freeze({
-    quakeProd: 'https://api-v2.p2pquake.net/v2',
+    quakeProd: 'https://api.p2pquake.net/v2',
     quakeSandbox: 'https://api-v2-sandbox.p2pquake.net/v2'
   });
 
@@ -21,14 +21,14 @@
   const NEWS_RETRY_SEC = 30;
 
   const PREFS = Object.freeze([
-    '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
-    '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
-    '新潟県','富山県','石川県','福井県','山梨県','長野県',
-    '岐阜県','静岡県','愛知県','三重県',
-    '滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県',
-    '鳥取県','島根県','岡山県','広島県','山口県',
-    '徳島県','香川県','愛媛県','高知県',
-    '福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県',
+    '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
+    '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県',
+    '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県',
+    '岐阜県', '静岡県', '愛知県', '三重県',
+    '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県',
+    '鳥取県', '島根県', '岡山県', '広島県', '山口県',
+    '徳島県', '香川県', '愛媛県', '高知県',
+    '福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県',
     '沖縄県'
   ]);
 
@@ -54,7 +54,7 @@
     sound1Min: 30,
     sound1Repeat: 1,
     sound2Min: 50,
-    sound2Repeat: 2,
+    sound2Repeat: 1,
 
     // news
     newsOn: true,
@@ -78,7 +78,7 @@
     newsRss: 'https://uhb.jp/news/data/lnf.xml',
     newsProxy: 'https://api.allorigins.win/raw?url=',
     newsSpeed: 90,
-    quakeProxy: 'https://api.allorigins.win/raw?url='
+    quakeProxy: ''
   });
 
   // =========================================================
@@ -86,15 +86,39 @@
   // =========================================================
   const $ = (id) => document.getElementById(id);
 
+  /**
+   * 数値を指定範囲に収める
+   * @param {number} n - 対象の数値
+   * @param {number} min - 最小値
+   * @param {number} max - 最大値
+   * @returns {number}
+   */
   const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 
+  /**
+   * 文字列等を整数に変換（失敗時は fallback）
+   * @param {any} v - 入力値
+   * @param {number} fallback - 変換失敗時の値
+   * @returns {number}
+   */
   const toInt = (v, fallback) => {
     const n = Number.parseInt(String(v ?? '').trim(), 10);
     return Number.isFinite(n) ? n : fallback;
   };
 
+  /**
+   * 文字列に変換してトリム
+   * @param {any} v - 入力値
+   * @returns {string}
+   */
   const toStr = (v) => String(v ?? '').trim();
 
+  /**
+   * 曖昧な値を真偽値に変換
+   * @param {any} v - 入力値
+   * @param {boolean} fallback - 判定不能時の値
+   * @returns {boolean}
+   */
   const toBoolLoose = (v, fallback) => {
     if (v === undefined || v === null || v === '') return fallback;
     const s = String(v).toLowerCase();
@@ -108,8 +132,19 @@
     .map((x) => x.trim())
     .filter(Boolean);
 
+  /**
+   * 配列の重複を除去
+   * @param {any[]} arr - 配列
+   * @returns {any[]}
+   */
   const uniq = (arr) => Array.from(new Set(arr));
 
+  /**
+   * JSONパース（失敗時は fallback）
+   * @param {string} s - JSON文字列
+   * @param {any} fallback - パース失敗時の値
+   * @returns {any}
+   */
   const safeJsonParse = (s, fallback) => {
     try {
       return JSON.parse(s);
@@ -118,14 +153,28 @@
     }
   };
 
+  /**
+   * 指定時間待機
+   * @param {number} ms - 待機時間(ms)
+   * @returns {Promise<void>}
+   */
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  /**
+   * 要素の表示/非表示を切り替え
+   * @param {HTMLElement} el - 要素
+   * @param {boolean} shown - 表示するかどうか
+   */
   const setDisplay = (el, shown) => {
     if (!el) return;
     el.style.display = shown ? '' : 'none';
   };
 
-  // テストバッジなど「block 前提」で出したいとき用
+  /**
+   * 要素を display: block で表示/非表示
+   * @param {HTMLElement} el - 要素
+   * @param {boolean} shown - 表示するかどうか
+   */
   const setBlock = (el, shown) => {
     if (!el) return;
     el.style.display = shown ? 'block' : 'none';
@@ -146,6 +195,12 @@
     return `${p}${url}`;
   };
 
+  /**
+   * ログ出力ヘルパー
+   * @param {string} prefix - ログのプレフィックス
+   * @param {object} [options] - オプション
+   * @param {boolean} [options.debug] - デバッグログを出力するかどうか
+   */
   const createLogger = (prefix, { debug = false } = {}) => {
     const p = `[${prefix}]`;
     return {
@@ -818,31 +873,32 @@
       const restartTickerAnimation = () => {
         if (!tickerTrackEl) return;
 
-        ensureTickerLoop();
-
-        // display:none の間は scrollWidth が取れないので、呼ぶ側は「表示後」にする
-        const full = tickerTrackEl.scrollWidth;
-        if (!Number.isFinite(full) || full <= 0) {
-          log.warn('Ticker 幅が不正:', full);
-          return;
-        }
-
-        const distance = full / 2; // px
-        const speed = clamp(toInt(cfg.newsSpeed, DEFAULTS.newsSpeed), 40, 900); // px/sec
-        let durationSec = distance / speed;
-        durationSec = clamp(durationSec, 18, 240);
-
-        // ここが重要：duration だけ変えても反映されない環境があるのでアニメーションを再起動する
+        // 一度止めてリスタート（DOM再生成対策）
         tickerTrackEl.style.animation = 'none';
-        // 強制リフロー
+
+        // reflow を強制（これが重要）
         // eslint-disable-next-line no-unused-expressions
         tickerTrackEl.offsetHeight;
-        tickerTrackEl.style.animation = ''; // CSS 側の animation 定義に戻す
 
+        const fullWidth = tickerTrackEl.scrollWidth;
+        if (!Number.isFinite(fullWidth) || fullWidth <= 0) return;
+
+        // keyframes が -50% なので /2
+        const distancePx = fullWidth / 2;
+
+        const speed = clamp(
+          Number(cfg.newsSpeed) || DEFAULTS.newsSpeed,
+          1,   // 最低 px/sec
+          900   // 最大 px/sec
+        );
+
+        let durationSec = distancePx / speed;
+        durationSec = clamp(durationSec, 1, 30000);
+
+        // アニメーションしている要素にだけ当てる
+        tickerTrackEl.style.animation = 'tickerMove linear infinite';
         tickerTrackEl.style.animationDuration = `${durationSec}s`;
         tickerTrackEl.style.animationPlayState = 'running';
-
-        log.debug('Ticker 再起動:', { full, distance, speed, durationSec });
       };
 
       const parseRssTitles = ({ xmlText, nowMs, ageMs, excludeWords }) => {
@@ -875,7 +931,6 @@
         tickerContent2El.textContent = '';
 
         if (!cfg.newsOn || !cfg.newsRss) {
-          log.info('ニュースは OFF または RSS 未設定のため表示しません');
           return;
         }
 
@@ -947,6 +1002,7 @@
             log.info('ニュース取得に成功（表示開始）');
           } catch (e) {
             log.warn('ニュース取得に失敗。再試行します:', e);
+            setStatus(`news: error ${String(e)}`);
             setDisplay(tickerEl, false);
             tickerContentEl.textContent = '';
             tickerContent2El.textContent = '';
@@ -1083,6 +1139,15 @@
 
       // fetch にタイムアウトを付ける（OBS/CEFでハングするのを避ける）
       const FETCH_TIMEOUT_MS = 30000;
+
+      /**
+       * タイムアウト付き fetch
+       * @param {string} url - リクエストURL
+       * @param {object} options - オプション
+       * @param {number} [options.timeoutMs] - タイムアウト時間(ms)
+       * @param {object} [options.log] - ロガー
+       * @returns {Promise<Response>}
+       */
       const fetchWithTimeout = async (url, { timeoutMs = FETCH_TIMEOUT_MS, log } = {}) => {
         const start = performance.now();
 
@@ -1096,7 +1161,9 @@
           return res;
         } catch (e) {
           const ms = Math.round(performance.now() - start);
-          log?.warn('fetch失敗', { url, ms, error: String(e) });
+          const isTimeout = e.name === 'AbortError';
+          const errorType = isTimeout ? 'TIMEOUT' : 'ERROR';
+          log?.warn(`fetch失敗 [${errorType}]`, { url, ms, error: String(e) });
           throw e;
         } finally {
           clearTimeout(timer);
@@ -1125,22 +1192,32 @@
         let res;
         try {
           res = await fetchWithTimeout(finalUrl, { log });
+          if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         } catch (e) {
           log.warn('地震取得: fetch 失敗', { finalUrl, error: String(e) });
 
-          // quakeProxy未設定で newsProxy がある場合だけ、newsProxyで再試行
-          if (!toStr(cfg.quakeProxy) && toStr(cfg.newsProxy)) {
+          let succeeded = false;
+
+          // 1. Proxyを使っていた場合 -> 直アクセスで再試行
+          if (finalUrl !== url) {
+            log.info('地震取得: Proxyなし(直アクセス)で再試行します', { url });
+            try {
+              res = await fetchWithTimeout(url, { log });
+              succeeded = true;
+            } catch (e2) {
+              log.warn('地震取得: 直アクセスも失敗', { url, error: String(e2) });
+            }
+          }
+
+          // 2. (直アクセスもダメ or 元々Proxyなし) かつ newsProxyがある場合 -> newsProxyで再試行
+          if (!succeeded && !toStr(cfg.quakeProxy) && toStr(cfg.newsProxy)) {
             const fallbackUrl = applyProxy(url, cfg.newsProxy);
             log.warn('地震取得: newsProxy で再試行します', { fallbackUrl });
             res = await fetchWithTimeout(fallbackUrl, { log });
-          } else {
-            throw e;
+            succeeded = true;
           }
-        }
 
-        if (!res.ok) {
-          log.warn('地震取得: HTTPエラー', { finalUrl, status: res.status });
-          throw new Error(`quake HTTP ${res.status}`);
+          if (!succeeded) throw e;
         }
 
         const data = await res.json();
