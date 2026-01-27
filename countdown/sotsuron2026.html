@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>卒論提出までのカウントダウン</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<!-- 
+★data-bg-color：背景色指定（red / green / blue / yellow / white / black）
+★data-deadline：締切日時（ISO形式推奨）
+★data-finished-html：終了後に表示するHTML内容
+ -->
+<body
+  data-bg-color="blue"
+  data-deadline="2026-02-06T16:00:00+09:00"
+  data-finished-html='<p>お疲れさまでした！</p>'
+>
+  <div class="page">
+    <!-- ★タイトル（空文字なら非表示）★ -->
+    <h1 class="title">
+      卒論提出まで
+    </h1>
+
+    <!-- ★説明文（空文字なら非表示）★ -->
+    <!-- <p class="description">
+      ここにイベントの説明文を入れる。改行や<span>HTMLタグ</span>も可。
+    </p> -->
+
+    <!-- カウントダウン本体 -->
+    <div id="countdown" class="countdown">
+      <div class="time-box">
+        <span class="time-number" id="days">--</span>
+        <span class="time-label">日</span>
+      </div>
+      <div class="time-box">
+        <span class="time-number" id="hours">--</span>
+        <span class="time-label">時間</span>
+      </div>
+      <div class="time-box">
+        <span class="time-number" id="minutes">--</span>
+        <span class="time-label">分</span>
+      </div>
+      <div class="time-box">
+        <span class="time-number" id="seconds">--</span>
+        <span class="time-label">秒</span>
+      </div>
+    </div>
+
+    <!-- 期限後にメッセージを出す場所 -->
+    <div id="finished-message" class="finished-message" hidden></div>
+  </div>
+
+  <script src="script.js"></script>
+  <script>
+    // タイトル・説明文が空文字だったら非表示にする
+    (function () {
+      var titleEl = document.querySelector('.title');
+      if (titleEl && titleEl.textContent.trim() === '') {
+        titleEl.style.display = 'none';
+      }
+
+      var descEl = document.querySelector('.description');
+      if (descEl && descEl.textContent.trim() === '') {
+        descEl.style.display = 'none';
+      }
+    })();
+  </script>
+</body>
+</html>
