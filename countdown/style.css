@@ -1,0 +1,151 @@
+/* ページ全体 */
+:root {
+  --bg-color: #000;
+  --text-color: #fff;
+  --accent-color: #ffffff33;
+}
+
+/* 背景色テーマ */
+:root[data-theme-bg="red"] {
+  --bg-color: #b00020;
+  --text-color: #ffffff;
+  --accent-color: #ffffff33;
+}
+
+:root[data-theme-bg="green"] {
+  --bg-color: #00695c;
+  --text-color: #ffffff;
+  --accent-color: #ffffff33;
+}
+
+:root[data-theme-bg="blue"] {
+  --bg-color: #0d47a1;
+  --text-color: #ffffff;
+  --accent-color: #ffffff33;
+}
+
+:root[data-theme-bg="yellow"] {
+  --bg-color: #ffeb3b;
+  --text-color: #222222;
+  --accent-color: #00000022;
+}
+
+:root[data-theme-bg="white"] {
+  --bg-color: #ffffff;
+  --text-color: #111111;
+  --accent-color: #00000011;
+}
+
+:root[data-theme-bg="black"] {
+  --bg-color: #000000;
+  --text-color: #ffffff;
+  --accent-color: #ffffff22;
+}
+
+/* ベース */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top left, var(--accent-color), transparent 60%),
+              radial-gradient(circle at bottom right, var(--accent-color), transparent 60%),
+              var(--bg-color);
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page {
+  text-align: center;
+  padding: 24px;
+  max-width: 640px;
+  width: 100%;
+}
+
+/* タイトル・説明文 */
+.title {
+  margin: 0 0 8px;
+  font-size: 2rem;
+  letter-spacing: 0.08em;
+}
+
+.description {
+  margin: 0 0 32px;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  opacity: 0.9;
+}
+
+/* カウントダウン部分 */
+.countdown {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.time-box {
+  min-width: 80px;
+  padding: 16px 12px;
+  border-radius: 12px;
+  background-color: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-theme-bg="white"] .time-box,
+:root[data-theme-bg="yellow"] .time-box {
+  background-color: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+}
+
+.time-number {
+  display: block;
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.time-label {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+/* 終了メッセージ */
+.finished-message {
+  margin-top: 32px;
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
+
+.overtime {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+/* スマホ対応 */
+@media (max-width: 480px) {
+  .title {
+    font-size: 1.6rem;
+  }
+  .time-box {
+    min-width: 70px;
+    padding: 12px 8px;
+  }
+  .time-number {
+    font-size: 1.8rem;
+  }
+}
