@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title>YouTube Fullscreen Looper</title>
     <style>
-        /* 1920x1080 固定サイズ */
         body, html {
             margin: 0;
             padding: 0;
@@ -23,15 +22,36 @@
             width: 100%;
             height: 100%;
             border: none;
-            pointer-events: none; /* マウス操作を無効化 */
+            pointer-events: none;
+        }
+
+        /* 音声を出すためのクリック待機画面 */
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            font-family: sans-serif;
+            cursor: pointer;
+            font-size: 24px;
         }
     </style>
 </head>
 <body>
+
+    <div id="overlay">画面をクリックして再生開始（音声あり）</div>
+
     <div id="video-container">
         <div id="player"></div>
     </div>
-    <!-- JavaScriptの読み込み -->
+
     <script src="script.js"></script>
 </body>
 </html>
