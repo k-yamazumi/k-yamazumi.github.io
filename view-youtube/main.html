@@ -2,9 +2,8 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>YouTube Loop</title>
+    <title>OBS YouTube Looper</title>
     <style>
-        /* 1920x1080 固定サイズ設定 */
         body, html {
             margin: 0;
             padding: 0;
@@ -13,22 +12,17 @@
             overflow: hidden;
             background-color: #000;
         }
-
         #video-container {
             position: relative;
             width: 100%;
             height: 100%;
         }
-
-        /* 再生バーなどを隠すための設定 */
         iframe {
             width: 100%;
             height: 100%;
             border: none;
-            pointer-events: none; /* OBS上での誤操作防止 */
+            pointer-events: none;
         }
-
-        /* 反映ボタンのスタイル（OBSには映らない位置や透過設定も可能） */
         #update-btn {
             position: fixed;
             top: 10px;
@@ -36,11 +30,9 @@
             z-index: 100;
             padding: 10px 20px;
             background: rgba(255, 255, 255, 0.5);
-            border: none;
+            border: 1px solid #ccc;
             cursor: pointer;
-            font-size: 14px;
         }
-        #update-btn:hover { background: rgba(255, 255, 255, 0.8); }
     </style>
 </head>
 <body>
@@ -51,7 +43,7 @@
     </div>
 
     <script>
-        // スプレッドシートの「ウェブに公開(CSV)」URL
+        // スプレッドシートの「ウェブに公開(CSV)」URLを貼り付け
         const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTL5oJh2n0ZbBBpuWqQWV6VvO8BfBEh7yKtLYpaf8Z-Ed_mhwoqBZJRG-jqusp1Y-o6zjIM9-4IJWY8/pub?gid=0&single=true&output=csv';
 
         let player;
@@ -60,21 +52,20 @@
         const firstScriptTag = document.getElementsByTagName('script')[0];
         firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
-        // YouTube Player APIの準備
         function onYouTubeIframeAPIReady() {
-            // 初期状態は空で作成
             player = new YT.Player('player', {
                 height: '1080',
                 width: '1920',
                 playerVars: {
                     'autoplay': 1,
-                    'controls': 0,        // コントロール非表示
-                    'disablekb': 1,       // キーボード操作無効
-                    'fs': 0,              // 全画面ボタン非表示
-                    'iv_load_policy': 3,  // アノテーション非表示
-                    'modestbranding': 1,  // ロゴを隠す
-                    'rel': 0,             // 関連動画非表示
-                    'mute': 1             // 自動再生のためにミュート必須
+                    'controls': 0,
+                    'disablekb': 1,
+                    'fs': 0,
+                    'iv_load_policy': 3,
+                    'modestbranding': 1,
+                    'rel': 0,
+                    'mute': 1,
+                    'origin': location.origin 
                 },
                 events: {
                     'onReady': onPlayerReady,
@@ -87,20 +78,27 @@
             updateVideo();
         }
 
-        // ループ再生の設定
         function onPlayerStateChange(event) {
             if (event.data === YT.PlayerState.ENDED) {
                 player.playVideo();
             }
         }
 
-        // スプレッドシートからURLを取得して動画を更新
         async function updateVideo() {
             try {
-                // キャッシュ回避のためにタイムスタンプを付与
-                const response = await fetch(`${SHEET_CSV_URL}?t=${new Date().getTime()}`);
+                // 【重要：修正】URLに ? が含まれているか確認してパラメータを結合
+                const separator = SHEET_CSV_URL.includes('?') ? '&' : '?';
+                const fetchUrl = `${SHEET_CSV_URL}${separator}t=${new Date().getTime()}`;
+                
+                const response = await fetch(fetchUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const csvData = await response.text();
-                const videoUrl = csvData.split('\n')[0].split(',')[0].trim();
+                // 1行目の1列目を取得
+                const videoUrl = csvData.split('\n')[0].split(',')[0].replace(/"/g, '').trim();
                 const videoId = extractVideoId(videoUrl);
 
                 if (videoId && player) {
@@ -108,20 +106,20 @@
                         videoId: videoId,
                         startSeconds: 0
                     });
+                } else {
+                    console.error("Video IDが見つかりません:", videoUrl);
                 }
             } catch (error) {
-                console.error("データの取得に失敗しました", error);
+                console.error("データの取得に失敗しました:", error);
             }
         }
 
-        // URLからVideo IDを抽出
         function extractVideoId(url) {
             const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
             const match = url.match(regExp);
             return (match && match[2].length === 11) ? match[2] : null;
         }
 
-        // ボタンクリックイベント
         document.getElementById('update-btn').addEventListener('click', updateVideo);
     </script>
 </body>
