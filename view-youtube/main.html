@@ -13,19 +13,24 @@
             background-color: #000;
         }
 
+        /* 動画を少し大きくして、YouTubeのロゴやタイトルを画面外に追い出す */
         #video-container {
+            position: relative;
             width: 100%;
             height: 100%;
+            overflow: hidden;
         }
 
         iframe {
-            width: 100%;
-            height: 100%;
+            position: absolute;
+            top: -5%;
+            left: -5%;
+            width: 110%;
+            height: 110%;
             border: none;
-            pointer-events: none;
+            /* pointer-events: none; を削除（広告スキップを押せるようにするため） */
         }
 
-        /* 音声を出すためのクリック待機画面 */
         #overlay {
             position: fixed;
             top: 0;
@@ -36,17 +41,20 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.9);
             color: white;
             font-family: sans-serif;
             cursor: pointer;
-            font-size: 24px;
+            font-size: 32px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
 
-    <div id="overlay">画面をクリックして再生開始（音声あり）</div>
+    <div id="overlay">
+        画面をクリックして<br>音声ありで再生開始
+    </div>
 
     <div id="video-container">
         <div id="player"></div>
