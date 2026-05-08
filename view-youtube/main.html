@@ -2,8 +2,9 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>OBS YouTube Looper</title>
+    <title>YouTube Fullscreen Looper</title>
     <style>
+        /* 1920x1080 固定サイズ */
         body, html {
             margin: 0;
             padding: 0;
@@ -12,115 +13,25 @@
             overflow: hidden;
             background-color: #000;
         }
+
         #video-container {
-            position: relative;
             width: 100%;
             height: 100%;
         }
+
         iframe {
             width: 100%;
             height: 100%;
             border: none;
-            pointer-events: none;
-        }
-        #update-btn {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            z-index: 100;
-            padding: 10px 20px;
-            background: rgba(255, 255, 255, 0.5);
-            border: 1px solid #ccc;
-            cursor: pointer;
+            pointer-events: none; /* マウス操作を無効化 */
         }
     </style>
 </head>
 <body>
-
-    <button id="update-btn">反映</button>
     <div id="video-container">
         <div id="player"></div>
     </div>
-
-    <script>
-        // スプレッドシートの「ウェブに公開(CSV)」URLを貼り付け
-        const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTL5oJh2n0ZbBBpuWqQWV6VvO8BfBEh7yKtLYpaf8Z-Ed_mhwoqBZJRG-jqusp1Y-o6zjIM9-4IJWY8/pub?gid=0&single=true&output=csv';
-
-        let player;
-        const tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        const firstScriptTag = document.getElementsByTagName('script')[0];
-        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-        function onYouTubeIframeAPIReady() {
-            player = new YT.Player('player', {
-                height: '1080',
-                width: '1920',
-                playerVars: {
-                    'autoplay': 1,
-                    'controls': 0,
-                    'disablekb': 1,
-                    'fs': 0,
-                    'iv_load_policy': 3,
-                    'modestbranding': 1,
-                    'rel': 0,
-                    'mute': 1,
-                    'origin': location.origin 
-                },
-                events: {
-                    'onReady': onPlayerReady,
-                    'onStateChange': onPlayerStateChange
-                }
-            });
-        }
-
-        function onPlayerReady(event) {
-            updateVideo();
-        }
-
-        function onPlayerStateChange(event) {
-            if (event.data === YT.PlayerState.ENDED) {
-                player.playVideo();
-            }
-        }
-
-        async function updateVideo() {
-            try {
-                // 【重要：修正】URLに ? が含まれているか確認してパラメータを結合
-                const separator = SHEET_CSV_URL.includes('?') ? '&' : '?';
-                const fetchUrl = `${SHEET_CSV_URL}${separator}t=${new Date().getTime()}`;
-                
-                const response = await fetch(fetchUrl);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const csvData = await response.text();
-                // 1行目の1列目を取得
-                const videoUrl = csvData.split('\n')[0].split(',')[0].replace(/"/g, '').trim();
-                const videoId = extractVideoId(videoUrl);
-
-                if (videoId && player) {
-                    player.loadVideoById({
-                        videoId: videoId,
-                        startSeconds: 0
-                    });
-                } else {
-                    console.error("Video IDが見つかりません:", videoUrl);
-                }
-            } catch (error) {
-                console.error("データの取得に失敗しました:", error);
-            }
-        }
-
-        function extractVideoId(url) {
-            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-            const match = url.match(regExp);
-            return (match && match[2].length === 11) ? match[2] : null;
-        }
-
-        document.getElementById('update-btn').addEventListener('click', updateVideo);
-    </script>
+    <!-- JavaScriptの読み込み -->
+    <script src="script.js"></script>
 </body>
 </html>
