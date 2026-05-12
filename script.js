@@ -17,10 +17,10 @@ const links = [
     icon: "📜",
   },
   {
-    title: "動画切り取りアプリ(仮)",
-    url: "https://douga-kiridashi-ai.streamlit.app/",
-    comment: "切り抜き動画作成の自動化を試みた",
-    icon: "🎬",
+    title: "YouTubeLiveリアルタイム監視",
+    url: "https://ytlivestat.streamlit.app/",
+    comment: "YouTubeLiveの視聴数などを比較するツール",
+    icon: "📊",
   },
 
   // 追加例：
