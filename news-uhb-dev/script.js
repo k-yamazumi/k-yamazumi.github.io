@@ -35,14 +35,14 @@
   // overlay（URLパラメータ / 保存値）としての基準値
   const DEFAULTS = Object.freeze({
     // clock
-    timeOn: true,
+    timeOn: false,
     timeDate: true,
     timeDow: true,
     timeSec: false,
     time24h: true,
 
     // earthquake
-    quakeOn: true,
+    quakeOn: false,
     quakeMinScale: 30,
     quakePageSec: 4,
     quakePerPage: 9,
@@ -75,6 +75,8 @@
   // settingsページの「初期入力値」（更新でここに戻す）
   // ※ overlay側のフォールバックとは別枠で管理
   const SETTINGS_INITIAL = Object.freeze({
+    timeOn: false,
+    quakeOn: false,
     newsRss: 'https://uhb.jp/news/data/lnf.xml',
     newsProxy: 'https://api.codetabs.com/v1/proxy?quest=',
     newsSpeed: 90,
@@ -1233,16 +1235,31 @@
         }
       };
 
+      // 地震APIのフォールバックプロキシリストを構築
+      const buildQuakeProxyList = () => {
+        const list = [];
+        // 1. 直アクセス（P2PQuake APIはCORS対応）
+        list.push('');
+        // 2. 設定値のプロキシ
+        const primary = toStr(cfg.quakeProxy);
+        if (primary && !list.includes(primary)) list.push(primary);
+        // 3. フォールバックプロキシ
+        for (const p of CORS_PROXY_FALLBACKS) {
+          if (!list.includes(p)) list.push(p);
+        }
+        return list;
+      };
+
       const fetchLatestQuake = async () => {
         const base = cfg.quakeSandbox ? API.quakeSandbox : API.quakeProd;
         const url = `${base}/history?codes=551&limit=1`;
-        const finalUrl = applyProxy(url, cfg.quakeProxy);
 
         // ここで環境情報も含めてログ（失敗時の切り分け用）
         log.debug('地震取得: request', {
           base,
           url,
-          finalUrl,
+          sandbox: cfg.quakeSandbox,
+          testMode: cfg.testMode,
           protocol: location.protocol,
           origin: location.origin,
           online: navigator.onLine
@@ -1252,45 +1269,36 @@
           log.warn('file:// からの地震API直fetchはCORSで失敗しやすいです。quakeProxy設定 or HTTP配信を推奨します。');
         }
 
-        let res;
-        try {
-          res = await fetchWithTimeout(finalUrl, { log });
-          if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-        } catch (e) {
-          log.warn('地震取得: fetch 失敗', { finalUrl, error: String(e) });
+        const proxies = buildQuakeProxyList();
+        let lastError = null;
 
-          let succeeded = false;
+        for (let i = 0; i < proxies.length; i += 1) {
+          const proxyUrl = proxies[i];
+          const finalUrl = proxyUrl ? applyProxy(url, proxyUrl) : url;
+          const label = proxyUrl || '(直アクセス)';
+          log.info(`地震取得を試行 [${i + 1}/${proxies.length}]:`, { proxy: label, finalUrl });
 
-          // 1. Proxyを使っていた場合 -> 直アクセスで再試行
-          if (finalUrl !== url) {
-            log.info('地震取得: Proxyなし(直アクセス)で再試行します', { url });
-            try {
-              res = await fetchWithTimeout(url, { log });
-              succeeded = true;
-            } catch (e2) {
-              log.warn('地震取得: 直アクセスも失敗', { url, error: String(e2) });
+          try {
+            const res = await fetchWithTimeout(finalUrl, { log });
+            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+
+            const data = await res.json();
+            if (!Array.isArray(data) || data.length === 0) {
+              log.warn('地震取得: データ空', { finalUrl });
+              return null;
             }
-          }
 
-          // 2. (直アクセスもダメ or 元々Proxyなし) かつ newsProxyがある場合 -> newsProxyで再試行
-          if (!succeeded && !toStr(cfg.quakeProxy) && toStr(cfg.newsProxy)) {
-            const fallbackUrl = applyProxy(url, cfg.newsProxy);
-            log.warn('地震取得: newsProxy で再試行します', { fallbackUrl });
-            res = await fetchWithTimeout(fallbackUrl, { log });
-            succeeded = true;
+            log.info('地震取得に成功:', { proxy: label, id: data[0]?.id, time: data[0]?.time });
+            return data[0];
+          } catch (e) {
+            log.warn(`地震プロキシ [${i + 1}/${proxies.length}] 失敗:`, label, e.message || e);
+            lastError = e;
           }
-
-          if (!succeeded) throw e;
         }
 
-        const data = await res.json();
-        if (!Array.isArray(data) || data.length === 0) {
-          log.warn('地震取得: データ空', { finalUrl });
-          return null;
-        }
-
-        log.debug('地震取得: OK', { id: data[0]?.id, time: data[0]?.time });
-        return data[0];
+        // すべて失敗
+        log.warn('地震取得: すべてのプロキシが失敗', lastError);
+        throw lastError;
       };
 
       const pollQuake = async () => {
@@ -1314,16 +1322,20 @@
             return;
           }
 
-          // 30分以上前の情報は表示しない
-          const evtTimeStr = ev.earthquake?.time || ev.time;
-          if (evtTimeStr) {
-            const evtTime = Date.parse(evtTimeStr);
-            // 30分 = 30 * 60 * 1000 ms
-            if (Number.isFinite(evtTime) && (Date.now() - evtTime > 30 * 60 * 1000)) {
-              quakeVisible(false);
-              setStatus('quake: too old (ignored)');
-              return;
+          // 30分以上前の情報は表示しない（テストモード/サンドボックスでは無効）
+          if (!cfg.testMode && !cfg.quakeSandbox) {
+            const evtTimeStr = ev.earthquake?.time || ev.time;
+            if (evtTimeStr) {
+              const evtTime = Date.parse(evtTimeStr);
+              // 30分 = 30 * 60 * 1000 ms
+              if (Number.isFinite(evtTime) && (Date.now() - evtTime > 30 * 60 * 1000)) {
+                quakeVisible(false);
+                setStatus('quake: too old (ignored)');
+                return;
+              }
             }
+          } else {
+            log.debug('テストモード: 30分制限をスキップ');
           }
 
           const sig = makeEventSig(ev);
