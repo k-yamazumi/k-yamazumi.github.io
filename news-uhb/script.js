@@ -35,14 +35,14 @@
   // overlay（URLパラメータ / 保存値）としての基準値
   const DEFAULTS = Object.freeze({
     // clock
-    timeOn: true,
+    timeOn: false,
     timeDate: true,
     timeDow: true,
     timeSec: false,
     time24h: true,
 
     // earthquake
-    quakeOn: true,
+    quakeOn: false,
     quakeMinScale: 30,
     quakePageSec: 4,
     quakePerPage: 9,
@@ -75,11 +75,20 @@
   // settingsページの「初期入力値」（更新でここに戻す）
   // ※ overlay側のフォールバックとは別枠で管理
   const SETTINGS_INITIAL = Object.freeze({
+    timeOn: false,
+    quakeOn: false,
     newsRss: 'https://uhb.jp/news/data/lnf.xml',
-    newsProxy: 'https://api.allorigins.win/raw?url=',
+    newsProxy: 'https://api.codetabs.com/v1/proxy?quest=',
     newsSpeed: 90,
     quakeProxy: ''
   });
+
+  // CORSプロキシのフォールバックリスト（設定値が失敗した場合に順次試行）
+  const CORS_PROXY_FALLBACKS = Object.freeze([
+    'https://api.codetabs.com/v1/proxy?quest=',
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?url='
+  ]);
 
   // =========================================================
   // ユーティリティ
@@ -782,6 +791,7 @@
       const quakeEl = $('quake');
       const quakeHeadlineEl = $('quakeHeadline');
       const quakeDetailEl = $('quakeDetail');
+      const quakeIssueTimeEl = $('quakeIssueTime');
 
       const statusEl = $('status');
       const testModeEl = $('testMode');
@@ -936,7 +946,6 @@
         }
 
         const rssUrl = cfg.newsRss;
-        const fetchUrl = applyProxy(rssUrl, cfg.newsProxy);
         const ageMs = clamp(toInt(cfg.newsAgeHours, DEFAULTS.newsAgeHours), 1, 365) * 60 * 60 * 1000;
 
         const excludeWords = String(cfg.newsExclude || '')
@@ -985,57 +994,82 @@
           }
         });
 
+        // フォールバックプロキシリストを構築（設定値を先頭に、残りを追加）
+        const buildProxyList = () => {
+          const list = [];
+          const primary = toStr(cfg.newsProxy);
+          if (primary) list.push(primary);
+          for (const p of CORS_PROXY_FALLBACKS) {
+            if (!list.includes(p)) list.push(p);
+          }
+          return list;
+        };
+
         const fetchNews = async () => {
           const now = Date.now();
-          log.info('ニュース取得を試行:', { fetchUrl });
+          const proxies = buildProxyList();
 
-          try {
-            const res = await fetch(fetchUrl, { cache: 'no-store' });
-            if (!res.ok) throw new Error(`RSS fetch failed: ${res.status}`);
+          let lastError = null;
 
-            const xmlText = await res.text();
-            const titles = parseRssTitles({ xmlText, nowMs: now, ageMs, excludeWords });
+          for (let i = 0; i < proxies.length; i += 1) {
+            const proxyUrl = proxies[i];
+            const url = applyProxy(rssUrl, proxyUrl);
+            log.info(`ニュース取得を試行 [${i + 1}/${proxies.length}]:`, { proxy: proxyUrl, url });
 
-            const text = (titles.length === 0)
-              ? '(ニュースが配信されるとここに表示されます)'
-              : titles.join('　◆　');
+            try {
+              const res = await fetch(url, { cache: 'no-store' });
+              if (!res.ok) throw new Error(`RSS fetch failed: ${res.status}`);
 
-            log.info('ニュース取得に成功');
+              const xmlText = await res.text();
+              const titles = parseRssTitles({ xmlText, nowMs: now, ageMs, excludeWords });
 
-            // 初回表示 or 表示中なら nextText にセットして更新待ち
-            if (!currentText) {
-              // 初回は即時適用
-              log.info('ニュース初回表示');
-              applyText(text);
-            } else if (text !== currentText) {
-              // 変更がある場合のみ更新予約
-              log.info('ニュース更新予約: 次のループで適用します');
-              nextText = text;
-            } else {
-              log.info('ニュース変更なし');
+              const text = (titles.length === 0)
+                ? '(ニュースが配信されるとここに表示されます)'
+                : titles.join('　◆　');
+
+              log.info('ニュース取得に成功:', { proxy: proxyUrl });
+
+              // 初回表示 or 表示中なら nextText にセットして更新待ち
+              if (!currentText) {
+                // 初回は即時適用
+                log.info('ニュース初回表示');
+                applyText(text);
+              } else if (text !== currentText) {
+                // 変更がある場合のみ更新予約
+                log.info('ニュース更新予約: 次のループで適用します');
+                nextText = text;
+              } else {
+                log.info('ニュース変更なし');
+              }
+
+              // 次回更新予約 (1時間後)
+              if (nextUpdateTimer) clearTimeout(nextUpdateTimer);
+              nextUpdateTimer = setTimeout(fetchNews, UPDATE_INTERVAL_MS);
+
+              // リトライタイマーがあればクリア
+              if (retryTimer) clearTimeout(retryTimer);
+              retryTimer = null;
+
+              return; // 成功したのでループ終了
+
+            } catch (e) {
+              log.warn(`プロキシ [${i + 1}/${proxies.length}] 失敗:`, proxyUrl, e.message || e);
+              lastError = e;
             }
-
-            // 次回更新予約 (1時間後)
-            if (nextUpdateTimer) clearTimeout(nextUpdateTimer);
-            nextUpdateTimer = setTimeout(fetchNews, UPDATE_INTERVAL_MS);
-
-            // リトライタイマーがあればクリア
-            if (retryTimer) clearTimeout(retryTimer);
-            retryTimer = null;
-
-          } catch (e) {
-            log.warn('ニュース取得に失敗。再試行します:', e);
-
-            // 初回失敗時のみエラー表示（裏で更新中の失敗は無視してリトライ）
-            if (!currentText) {
-              setStatus(`news: error ${String(e)}`);
-              setDisplay(tickerEl, false);
-            }
-
-            // リトライ予約 (30秒後)
-            if (retryTimer) clearTimeout(retryTimer);
-            retryTimer = setTimeout(fetchNews, NEWS_RETRY_SEC * 1000);
           }
+
+          // すべてのプロキシが失敗
+          log.warn('すべてのプロキシが失敗。再試行します:', lastError);
+
+          // 初回失敗時のみエラー表示（裏で更新中の失敗は無視してリトライ）
+          if (!currentText) {
+            setStatus(`news: error ${String(lastError)}`);
+            setDisplay(tickerEl, false);
+          }
+
+          // リトライ予約 (30秒後)
+          if (retryTimer) clearTimeout(retryTimer);
+          retryTimer = setTimeout(fetchNews, NEWS_RETRY_SEC * 1000);
         };
 
         // 初回実行
@@ -1138,11 +1172,16 @@
         }
       };
 
-      const showPages = async (pages, maxScale) => {
+      const showPages = async (pages, maxScale, issueTime) => {
         showToken += 1;
         const token = showToken;
 
         if (!quakeHeadlineEl || !quakeDetailEl) return;
+
+        // 発表時刻を表示
+        if (quakeIssueTimeEl) {
+          quakeIssueTimeEl.textContent = issueTime ? `${issueTime}発表` : '';
+        }
 
         quakeVisible(true);
         await playSoundForScale(maxScale);
@@ -1202,16 +1241,31 @@
         }
       };
 
+      // 地震APIのフォールバックプロキシリストを構築
+      const buildQuakeProxyList = () => {
+        const list = [];
+        // 1. 直アクセス（P2PQuake APIはCORS対応）
+        list.push('');
+        // 2. 設定値のプロキシ
+        const primary = toStr(cfg.quakeProxy);
+        if (primary && !list.includes(primary)) list.push(primary);
+        // 3. フォールバックプロキシ
+        for (const p of CORS_PROXY_FALLBACKS) {
+          if (!list.includes(p)) list.push(p);
+        }
+        return list;
+      };
+
       const fetchLatestQuake = async () => {
         const base = cfg.quakeSandbox ? API.quakeSandbox : API.quakeProd;
         const url = `${base}/history?codes=551&limit=1`;
-        const finalUrl = applyProxy(url, cfg.quakeProxy);
 
         // ここで環境情報も含めてログ（失敗時の切り分け用）
         log.debug('地震取得: request', {
           base,
           url,
-          finalUrl,
+          sandbox: cfg.quakeSandbox,
+          testMode: cfg.testMode,
           protocol: location.protocol,
           origin: location.origin,
           online: navigator.onLine
@@ -1221,45 +1275,36 @@
           log.warn('file:// からの地震API直fetchはCORSで失敗しやすいです。quakeProxy設定 or HTTP配信を推奨します。');
         }
 
-        let res;
-        try {
-          res = await fetchWithTimeout(finalUrl, { log });
-          if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-        } catch (e) {
-          log.warn('地震取得: fetch 失敗', { finalUrl, error: String(e) });
+        const proxies = buildQuakeProxyList();
+        let lastError = null;
 
-          let succeeded = false;
+        for (let i = 0; i < proxies.length; i += 1) {
+          const proxyUrl = proxies[i];
+          const finalUrl = proxyUrl ? applyProxy(url, proxyUrl) : url;
+          const label = proxyUrl || '(直アクセス)';
+          log.info(`地震取得を試行 [${i + 1}/${proxies.length}]:`, { proxy: label, finalUrl });
 
-          // 1. Proxyを使っていた場合 -> 直アクセスで再試行
-          if (finalUrl !== url) {
-            log.info('地震取得: Proxyなし(直アクセス)で再試行します', { url });
-            try {
-              res = await fetchWithTimeout(url, { log });
-              succeeded = true;
-            } catch (e2) {
-              log.warn('地震取得: 直アクセスも失敗', { url, error: String(e2) });
+          try {
+            const res = await fetchWithTimeout(finalUrl, { log });
+            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+
+            const data = await res.json();
+            if (!Array.isArray(data) || data.length === 0) {
+              log.warn('地震取得: データ空', { finalUrl });
+              return null;
             }
-          }
 
-          // 2. (直アクセスもダメ or 元々Proxyなし) かつ newsProxyがある場合 -> newsProxyで再試行
-          if (!succeeded && !toStr(cfg.quakeProxy) && toStr(cfg.newsProxy)) {
-            const fallbackUrl = applyProxy(url, cfg.newsProxy);
-            log.warn('地震取得: newsProxy で再試行します', { fallbackUrl });
-            res = await fetchWithTimeout(fallbackUrl, { log });
-            succeeded = true;
+            log.info('地震取得に成功:', { proxy: label, id: data[0]?.id, time: data[0]?.time });
+            return data[0];
+          } catch (e) {
+            log.warn(`地震プロキシ [${i + 1}/${proxies.length}] 失敗:`, label, e.message || e);
+            lastError = e;
           }
-
-          if (!succeeded) throw e;
         }
 
-        const data = await res.json();
-        if (!Array.isArray(data) || data.length === 0) {
-          log.warn('地震取得: データ空', { finalUrl });
-          return null;
-        }
-
-        log.debug('地震取得: OK', { id: data[0]?.id, time: data[0]?.time });
-        return data[0];
+        // すべて失敗
+        log.warn('地震取得: すべてのプロキシが失敗', lastError);
+        throw lastError;
       };
 
       const pollQuake = async () => {
@@ -1283,16 +1328,20 @@
             return;
           }
 
-          // 30分以上前の情報は表示しない
-          const evtTimeStr = ev.earthquake?.time || ev.time;
-          if (evtTimeStr) {
-            const evtTime = Date.parse(evtTimeStr);
-            // 30分 = 30 * 60 * 1000 ms
-            if (Number.isFinite(evtTime) && (Date.now() - evtTime > 30 * 60 * 1000)) {
-              quakeVisible(false);
-              setStatus('quake: too old (ignored)');
-              return;
+          // 30分以上前の情報は表示しない（テストモード/サンドボックスでは無効）
+          if (!cfg.testMode && !cfg.quakeSandbox) {
+            const evtTimeStr = ev.earthquake?.time || ev.time;
+            if (evtTimeStr) {
+              const evtTime = Date.parse(evtTimeStr);
+              // 30分 = 30 * 60 * 1000 ms
+              if (Number.isFinite(evtTime) && (Date.now() - evtTime > 30 * 60 * 1000)) {
+                quakeVisible(false);
+                setStatus('quake: too old (ignored)');
+                return;
+              }
             }
+          } else {
+            log.debug('テストモード: 30分制限をスキップ');
           }
 
           const sig = makeEventSig(ev);
@@ -1311,13 +1360,18 @@
 
           setStatus(`quake: show pages=${pages.length} maxScale=${maxScale}`);
 
+          // 発表時刻を抽出（"2023/06/24 10:00:16" → "10:00"）
+          const issueTimeRaw = ev.issue?.time || '';
+          const issueTimeMatch = issueTimeRaw.match(/(\d{1,2}):(\d{2})/)
+          const issueTime = issueTimeMatch ? `${issueTimeMatch[1]}:${issueTimeMatch[2]}` : '';
+
           // ログ出力
           pages.forEach((p, i) => {
             log.info(`地震情報表示 [${i + 1}/${pages.length}]`, { headline: p.headline, detail: p.detail });
           });
 
           showToken += 1;
-          await showPages(pages, maxScale);
+          await showPages(pages, maxScale, issueTime);
         } catch (e) {
           quakeVisible(false);
           setStatus(`quake: error ${String(e)}`);
