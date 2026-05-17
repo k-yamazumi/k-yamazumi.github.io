@@ -791,6 +791,7 @@
       const quakeEl = $('quake');
       const quakeHeadlineEl = $('quakeHeadline');
       const quakeDetailEl = $('quakeDetail');
+      const quakeIssueTimeEl = $('quakeIssueTime');
 
       const statusEl = $('status');
       const testModeEl = $('testMode');
@@ -1171,11 +1172,16 @@
         }
       };
 
-      const showPages = async (pages, maxScale) => {
+      const showPages = async (pages, maxScale, issueTime) => {
         showToken += 1;
         const token = showToken;
 
         if (!quakeHeadlineEl || !quakeDetailEl) return;
+
+        // 発表時刻を表示
+        if (quakeIssueTimeEl) {
+          quakeIssueTimeEl.textContent = issueTime ? `${issueTime}発表` : '';
+        }
 
         quakeVisible(true);
         await playSoundForScale(maxScale);
@@ -1354,13 +1360,18 @@
 
           setStatus(`quake: show pages=${pages.length} maxScale=${maxScale}`);
 
+          // 発表時刻を抽出（"2023/06/24 10:00:16" → "10:00"）
+          const issueTimeRaw = ev.issue?.time || '';
+          const issueTimeMatch = issueTimeRaw.match(/(\d{1,2}):(\d{2})/)
+          const issueTime = issueTimeMatch ? `${issueTimeMatch[1]}:${issueTimeMatch[2]}` : '';
+
           // ログ出力
           pages.forEach((p, i) => {
             log.info(`地震情報表示 [${i + 1}/${pages.length}]`, { headline: p.headline, detail: p.detail });
           });
 
           showToken += 1;
-          await showPages(pages, maxScale);
+          await showPages(pages, maxScale, issueTime);
         } catch (e) {
           quakeVisible(false);
           setStatus(`quake: error ${String(e)}`);
