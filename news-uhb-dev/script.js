@@ -76,10 +76,17 @@
   // ※ overlay側のフォールバックとは別枠で管理
   const SETTINGS_INITIAL = Object.freeze({
     newsRss: 'https://uhb.jp/news/data/lnf.xml',
-    newsProxy: 'https://api.allorigins.win/raw?url=',
+    newsProxy: 'https://api.codetabs.com/v1/proxy?quest=',
     newsSpeed: 90,
     quakeProxy: ''
   });
+
+  // CORSプロキシのフォールバックリスト（設定値が失敗した場合に順次試行）
+  const CORS_PROXY_FALLBACKS = Object.freeze([
+    'https://api.codetabs.com/v1/proxy?quest=',
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?url='
+  ]);
 
   // =========================================================
   // ユーティリティ
@@ -936,7 +943,6 @@
         }
 
         const rssUrl = cfg.newsRss;
-        const fetchUrl = applyProxy(rssUrl, cfg.newsProxy);
         const ageMs = clamp(toInt(cfg.newsAgeHours, DEFAULTS.newsAgeHours), 1, 365) * 60 * 60 * 1000;
 
         const excludeWords = String(cfg.newsExclude || '')
@@ -985,57 +991,82 @@
           }
         });
 
+        // フォールバックプロキシリストを構築（設定値を先頭に、残りを追加）
+        const buildProxyList = () => {
+          const list = [];
+          const primary = toStr(cfg.newsProxy);
+          if (primary) list.push(primary);
+          for (const p of CORS_PROXY_FALLBACKS) {
+            if (!list.includes(p)) list.push(p);
+          }
+          return list;
+        };
+
         const fetchNews = async () => {
           const now = Date.now();
-          log.info('ニュース取得を試行:', { fetchUrl });
+          const proxies = buildProxyList();
 
-          try {
-            const res = await fetch(fetchUrl, { cache: 'no-store' });
-            if (!res.ok) throw new Error(`RSS fetch failed: ${res.status}`);
+          let lastError = null;
 
-            const xmlText = await res.text();
-            const titles = parseRssTitles({ xmlText, nowMs: now, ageMs, excludeWords });
+          for (let i = 0; i < proxies.length; i += 1) {
+            const proxyUrl = proxies[i];
+            const url = applyProxy(rssUrl, proxyUrl);
+            log.info(`ニュース取得を試行 [${i + 1}/${proxies.length}]:`, { proxy: proxyUrl, url });
 
-            const text = (titles.length === 0)
-              ? '(ニュースが配信されるとここに表示されます)'
-              : titles.join('　◆　');
+            try {
+              const res = await fetch(url, { cache: 'no-store' });
+              if (!res.ok) throw new Error(`RSS fetch failed: ${res.status}`);
 
-            log.info('ニュース取得に成功');
+              const xmlText = await res.text();
+              const titles = parseRssTitles({ xmlText, nowMs: now, ageMs, excludeWords });
 
-            // 初回表示 or 表示中なら nextText にセットして更新待ち
-            if (!currentText) {
-              // 初回は即時適用
-              log.info('ニュース初回表示');
-              applyText(text);
-            } else if (text !== currentText) {
-              // 変更がある場合のみ更新予約
-              log.info('ニュース更新予約: 次のループで適用します');
-              nextText = text;
-            } else {
-              log.info('ニュース変更なし');
+              const text = (titles.length === 0)
+                ? '(ニュースが配信されるとここに表示されます)'
+                : titles.join('　◆　');
+
+              log.info('ニュース取得に成功:', { proxy: proxyUrl });
+
+              // 初回表示 or 表示中なら nextText にセットして更新待ち
+              if (!currentText) {
+                // 初回は即時適用
+                log.info('ニュース初回表示');
+                applyText(text);
+              } else if (text !== currentText) {
+                // 変更がある場合のみ更新予約
+                log.info('ニュース更新予約: 次のループで適用します');
+                nextText = text;
+              } else {
+                log.info('ニュース変更なし');
+              }
+
+              // 次回更新予約 (1時間後)
+              if (nextUpdateTimer) clearTimeout(nextUpdateTimer);
+              nextUpdateTimer = setTimeout(fetchNews, UPDATE_INTERVAL_MS);
+
+              // リトライタイマーがあればクリア
+              if (retryTimer) clearTimeout(retryTimer);
+              retryTimer = null;
+
+              return; // 成功したのでループ終了
+
+            } catch (e) {
+              log.warn(`プロキシ [${i + 1}/${proxies.length}] 失敗:`, proxyUrl, e.message || e);
+              lastError = e;
             }
-
-            // 次回更新予約 (1時間後)
-            if (nextUpdateTimer) clearTimeout(nextUpdateTimer);
-            nextUpdateTimer = setTimeout(fetchNews, UPDATE_INTERVAL_MS);
-
-            // リトライタイマーがあればクリア
-            if (retryTimer) clearTimeout(retryTimer);
-            retryTimer = null;
-
-          } catch (e) {
-            log.warn('ニュース取得に失敗。再試行します:', e);
-
-            // 初回失敗時のみエラー表示（裏で更新中の失敗は無視してリトライ）
-            if (!currentText) {
-              setStatus(`news: error ${String(e)}`);
-              setDisplay(tickerEl, false);
-            }
-
-            // リトライ予約 (30秒後)
-            if (retryTimer) clearTimeout(retryTimer);
-            retryTimer = setTimeout(fetchNews, NEWS_RETRY_SEC * 1000);
           }
+
+          // すべてのプロキシが失敗
+          log.warn('すべてのプロキシが失敗。再試行します:', lastError);
+
+          // 初回失敗時のみエラー表示（裏で更新中の失敗は無視してリトライ）
+          if (!currentText) {
+            setStatus(`news: error ${String(lastError)}`);
+            setDisplay(tickerEl, false);
+          }
+
+          // リトライ予約 (30秒後)
+          if (retryTimer) clearTimeout(retryTimer);
+          retryTimer = setTimeout(fetchNews, NEWS_RETRY_SEC * 1000);
         };
 
         // 初回実行
