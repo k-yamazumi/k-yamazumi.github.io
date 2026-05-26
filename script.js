@@ -22,6 +22,12 @@ const links = [
     comment: "YouTubeLiveの視聴数などを比較するツール",
     icon: "📊",
   },
+  {
+    title: "画像圧縮くん",
+    url: "./tools/image-compression.html",
+    comment: "ムダに高画質なJPEGの容量を小さくするツール",
+    icon: "🖼️",
+  },
 
   // 追加例：
   // {
