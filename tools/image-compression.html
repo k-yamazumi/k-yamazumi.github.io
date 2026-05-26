@@ -26,8 +26,6 @@
 <body>
     <div class="container">
         <h2>画像圧縮くん</h2>
-        <div id="drop-zone">画像のサイズを小さくします<br>(クリックして選択も可能)</div>
-        <input type="file" id="fileInput" multiple accept="image/jpeg" style="display:none;">
         
         <div class="controls">
             <label><input type="checkbox" id="addPrefix"> ファイル名に「resized-」を付ける</label>
@@ -41,6 +39,9 @@
                 縮小率: <input type="range" id="mtRange" min="10" max="100" value="80"> <span id="mtVal">80</span>%
             </div>
         </div>
+
+        <div id="drop-zone">画像のサイズを小さくします<br>(クリックして選択も可能)</div>
+        <input type="file" id="fileInput" multiple accept="image/jpeg" style="display:none;">
         
         <div id="spinner"></div>
         <p id="status"></p>
@@ -101,19 +102,17 @@
             }
 
             if (processedCount > 0) {
+                const link = document.createElement('a');
                 if (processedCount === 1) {
-                    const blob = await zip.generateAsync({type: 'blob'});
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
+                    const fileData = await zip.file(Object.keys(zip.files)[0]).async('blob');
+                    link.href = URL.createObjectURL(fileData);
                     link.download = addPrefix ? 'resized-' + files[0].name : files[0].name;
-                    link.click();
                 } else {
                     const content = await zip.generateAsync({type: 'blob'});
-                    const link = document.createElement('a');
                     link.href = URL.createObjectURL(content);
                     link.download = `resizedimages-${Date.now()}.zip`;
-                    link.click();
                 }
+                link.click();
             }
 
             spinner.style.display = 'none';
@@ -123,7 +122,7 @@
         }
 
         function processImage(file, preset) {
-            return new Promise(resolve => {
+            return new Promise((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = e => {
                     const img = new Image();
@@ -138,10 +137,15 @@
                         
                         canvas.width = w; canvas.height = h;
                         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                        canvas.toBlob(resolve, 'image/jpeg', q);
+                        canvas.toBlob(blob => {
+                            if (blob) resolve(blob);
+                            else reject(new Error("Blob conversion failed"));
+                        }, 'image/jpeg', q);
                     };
+                    img.onerror = reject;
                     img.src = e.target.result;
                 };
+                reader.onerror = reject;
                 reader.readAsDataURL(file);
             });
         }
