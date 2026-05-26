@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>画像圧縮くん</title>
+    <!-- CDNから読み込み -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="showErrorModal()"></script>
+    <style>
+        :root { --accent: #d32f2f; --bg: #fdfafa; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: #333; display: flex; flex-direction: column; align-items: center; padding: 40px; }
+        .container { width: 100%; max-width: 600px; text-align: center; }
+        #drop-zone { border: 2px dashed #ef9a9a; padding: 80px 20px; margin: 20px 0; border-radius: 16px; transition: 0.3s; cursor: pointer; background: #fff; display: flex; align-items: center; justify-content: center; }
+        #drop-zone.hover { border-color: var(--accent); background: #ffebee; }
+        .controls { margin: 10px 0 20px 0; font-size: 0.9em; text-align: left; display: inline-block; }
+        .radio-group { margin: 10px 0; }
+        .radio-item { display: block; margin: 5px 0; cursor: pointer; }
+        #mt-settings { display: none; margin-top: 10px; padding: 10px; background: #eee; border-radius: 8px; }
+        #spinner { display: none; border: 4px solid #f3f3f3; border-top: 4px solid var(--accent); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .footer { margin-top: 40px; font-size: 0.85em; color: #666; border-top: 1px solid #ccc; padding-top: 20px; text-align: left; }
+        /* モーダル */
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: #fff; padding: 30px; border-radius: 8px; max-width: 400px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>画像圧縮くん</h2>
+        <div id="drop-zone">画像のサイズを小さくします<br>(クリックして選択も可能)</div>
+        <input type="file" id="fileInput" multiple accept="image/jpeg" style="display:none;">
+        
+        <div class="controls">
+            <label><input type="checkbox" id="addPrefix"> ファイル名に「resized-」を付ける</label>
+            <div class="radio-group">
+                <label class="radio-item"><input type="radio" name="preset" value="hd" checked> HD (高画質)</label>
+                <label class="radio-item"><input type="radio" name="preset" value="doc"> 資料用 (中画質)</label>
+                <label class="radio-item"><input type="radio" name="preset" value="ultra"> 超圧縮 (低画質)</label>
+                <label class="radio-item"><input type="radio" name="preset" value="mt"> マニュアル</label>
+            </div>
+            <div id="mt-settings">
+                縮小率: <input type="range" id="mtRange" min="10" max="100" value="80"> <span id="mtVal">80</span>%
+            </div>
+        </div>
+        
+        <div id="spinner"></div>
+        <p id="status"></p>
+
+        <div class="footer">
+            <h3>使い方</h3>
+            <p>1. 圧縮設定を選択<br>2. 画像をドラッグ＆ドロップ（または選択）<br>3. 自動的に処理が始まり、ダウンロードされます</p>
+            <p>※ すべての処理はブラウザ内（ローカル）で行われます。画像データが外部に送信されることはありません。</p>
+        </div>
+    </div>
+
+    <div id="modal"><div class="modal-content">ライブラリの読み込みに失敗しました。インターネット接続を確認してください。</div></div>
+
+    <script>
+        function showErrorModal() { document.getElementById('modal').style.display = 'flex'; }
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('fileInput');
+        const spinner = document.getElementById('spinner');
+        const status = document.getElementById('status');
+        const mtSettings = document.getElementById('mt-settings');
+        const mtRange = document.getElementById('mtRange');
+        const mtVal = document.getElementById('mtVal');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', e => handleFiles(e.target.files));
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('hover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
+        dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('hover'); handleFiles(e.dataTransfer.files); });
+
+        document.querySelectorAll('input[name="preset"]').forEach(r => {
+            r.addEventListener('change', () => mtSettings.style.display = (r.value === 'mt') ? 'block' : 'none');
+        });
+        mtRange.addEventListener('input', () => mtVal.innerText = mtRange.value);
+
+        async function handleFiles(fileList) {
+            if (typeof JSZip === 'undefined') return showErrorModal();
+
+            const files = Array.from(fileList).filter(f => f.type === 'image/jpeg');
+            if (files.length === 0) return;
+
+            spinner.style.display = 'block';
+            dropZone.style.display = 'none';
+            status.innerText = '処理中...';
+
+            const zip = new JSZip();
+            const addPrefix = document.getElementById('addPrefix').checked;
+            const preset = document.querySelector('input[name="preset"]:checked').value;
+            
+            let processedCount = 0;
+            for (const file of files) {
+                try {
+                    const blob = await processImage(file, preset);
+                    const fileName = addPrefix ? 'resized-' + file.name : file.name;
+                    zip.file(fileName, blob);
+                    processedCount++;
+                } catch (e) { console.error(e); }
+            }
+
+            if (processedCount > 0) {
+                if (processedCount === 1) {
+                    const blob = await zip.generateAsync({type: 'blob'});
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = addPrefix ? 'resized-' + files[0].name : files[0].name;
+                    link.click();
+                } else {
+                    const content = await zip.generateAsync({type: 'blob'});
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(content);
+                    link.download = `resizedimages-${Date.now()}.zip`;
+                    link.click();
+                }
+            }
+
+            spinner.style.display = 'none';
+            dropZone.style.display = 'flex';
+            status.innerText = '完了しました！';
+            setTimeout(() => status.innerText = '', 3000);
+        }
+
+        function processImage(file, preset) {
+            return new Promise(resolve => {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let w = img.width, h = img.height;
+                        let q = 0.8;
+                        if (preset === 'hd') { const r = Math.min(1, 2000/Math.max(w,h)); w*=r; h*=r; }
+                        else if (preset === 'doc') { w*=0.5; h*=0.5; q=0.7; }
+                        else if (preset === 'ultra') { w*=0.3; h*=0.3; q=0.4; }
+                        else if (preset === 'mt') { const r = mtRange.value/100; w*=r; h*=r; }
+                        
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        canvas.toBlob(resolve, 'image/jpeg', q);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+    </script>
+</body>
+</html>
