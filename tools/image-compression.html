@@ -30,6 +30,7 @@
         <div class="controls">
             <label><input type="checkbox" id="addPrefix"> ファイル名に「resized-」を付ける</label>
             <div class="radio-group">
+                <label class="radio-item"><input type="radio" name="preset" value="original"> そのまま画質</label>
                 <label class="radio-item"><input type="radio" name="preset" value="hd" checked> HD (高画質)</label>
                 <label class="radio-item"><input type="radio" name="preset" value="doc"> 資料用 (中画質)</label>
                 <label class="radio-item"><input type="radio" name="preset" value="ultra"> 超圧縮 (低画質)</label>
@@ -130,7 +131,9 @@
                         const canvas = document.createElement('canvas');
                         let w = img.width, h = img.height;
                         let q = 0.8;
-                        if (preset === 'hd') { const r = Math.min(1, 2000/Math.max(w,h)); w*=r; h*=r; }
+                        
+                        if (preset === 'original') { /* そのまま */ }
+                        else if (preset === 'hd') { const r = Math.min(1, 2000/Math.max(w,h)); w*=r; h*=r; }
                         else if (preset === 'doc') { w*=0.5; h*=0.5; q=0.7; }
                         else if (preset === 'ultra') { w*=0.3; h*=0.3; q=0.4; }
                         else if (preset === 'mt') { const r = mtRange.value/100; w*=r; h*=r; }
