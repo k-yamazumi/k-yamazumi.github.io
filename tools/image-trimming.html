@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>画像トリミングくん</title>
+    <!-- CDNから読み込み -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" onerror="showErrorModal()"></script>
+    <style>
+        :root { --accent: #2196F3; --bg: #f0f8ff; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: #333; display: flex; flex-direction: column; align-items: center; padding: 40px; }
+        .container { width: 100%; max-width: 800px; text-align: center; }
+        #drop-zone { border: 2px dashed #90caf9; padding: 80px 20px; margin: 20px 0; border-radius: 16px; transition: 0.3s; cursor: pointer; background: #fff; display: flex; align-items: center; justify-content: center; }
+        #drop-zone.hover { border-color: var(--accent); background: #e3f2fd; }
+        
+        #editor-zone { display: none; margin-top: 20px; }
+        .cropper-container { position: relative; display: inline-block; user-select: none; border: 1px solid #ccc; max-width: 100%; background: #eee; overflow: hidden; }
+        #target-img { display: block; max-width: 100%; max-height: 60vh; pointer-events: none; }
+        
+        #crop-box { position: absolute; border: 2px dashed #f44336; background: rgba(244, 67, 54, 0.2); display: none; cursor: move; }
+        
+        /* リサイズ用ハンドル */
+        .handle { position: absolute; width: 10px; height: 10px; background: #f44336; border: 1px solid #fff; box-sizing: border-box; }
+        .handle.nw { top: -5px; left: -5px; cursor: nwse-resize; }
+        .handle.n { top: -5px; left: calc(50% - 5px); cursor: ns-resize; }
+        .handle.ne { top: -5px; right: -5px; cursor: nesw-resize; }
+        .handle.e { top: calc(50% - 5px); right: -5px; cursor: ew-resize; }
+        .handle.se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+        .handle.s { bottom: -5px; left: calc(50% - 5px); cursor: ns-resize; }
+        .handle.sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+        .handle.w { top: calc(50% - 5px); left: -5px; cursor: ew-resize; }
+
+        /* 座標・サイズ入力エリア */
+        .coord-panel { margin: 15px auto; padding: 15px; background: #fff; border-radius: 8px; border: 1px solid #ccc; display: inline-flex; gap: 15px; align-items: center; flex-wrap: wrap; justify-content: center; }
+        .coord-group { display: flex; align-items: center; gap: 5px; }
+        .coord-group label { font-size: 0.9em; font-weight: bold; color: #555; }
+        .coord-group input { width: 70px; padding: 5px; border: 1px solid #ccc; border-radius: 4px; text-align: right; }
+        
+        #spinner { display: none; border: 4px solid #f3f3f3; border-top: 4px solid var(--accent); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .footer { margin-top: 40px; font-size: 0.85em; color: #666; border-top: 1px solid #ccc; padding-top: 20px; text-align: left; }
+        
+        .btn { background: var(--accent); color: #fff; border: none; padding: 12px 24px; font-size: 1em; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+        .btn:hover { background: #1976D2; }
+        
+        /* モーダル */
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: #fff; padding: 30px; border-radius: 8px; max-width: 400px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>画像トリミングくん</h2>
+
+        <div id="drop-zone">複数画像をドラッグ＆ドロップ<br>(クリックして選択も可能)</div>
+        <input type="file" id="fileInput" multiple accept="image/*" style="display:none;">
+        
+        <div id="editor-zone">
+            <p>画像上をドラッグして範囲指定。枠の中をドラッグで移動、端の四角をドラッグでサイズ変更ができます。</p>
+            <div class="cropper-container" id="cropper">
+                <img id="target-img" src="">
+                <div id="crop-box">
+                    <div class="handle nw" data-dir="nw"></div>
+                    <div class="handle n" data-dir="n"></div>
+                    <div class="handle ne" data-dir="ne"></div>
+                    <div class="handle e" data-dir="e"></div>
+                    <div class="handle se" data-dir="se"></div>
+                    <div class="handle s" data-dir="s"></div>
+                    <div class="handle sw" data-dir="sw"></div>
+                    <div class="handle w" data-dir="w"></div>
+                </div>
+            </div>
+
+            <br>
+            <div class="coord-panel" id="coord-panel" style="display:none;">
+                <div class="coord-group"><label>X:</label><input type="number" id="valX" min="0" value="0"></div>
+                <div class="coord-group"><label>Y:</label><input type="number" id="valY" min="0" value="0"></div>
+                <div class="coord-group"><label>W(幅):</label><input type="number" id="valW" min="1" value="0"></div>
+                <div class="coord-group"><label>H(高さ):</label><input type="number" id="valH" min="1" value="0"></div>
+            </div>
+            
+            <br>
+            <button class="btn" id="crop-btn">範囲確定＆トリミング</button>
+        </div>
+
+        <div id="spinner"></div>
+        <p id="status"></p>
+
+        <div class="footer">
+            <h3>使い方</h3>
+            <p>1. 切り抜きたい画像（複数可）をドラッグ＆ドロップ<br>
+               2. 1枚目の画像上でマウスをドラッグし、範囲を指定<br>
+               3. 「範囲確定＆トリミング」を押すと、全ての画像が同じ範囲で切り抜かれてZIPで保存されます。</p>
+            <p>※ 外部通信は一切行いません。完全にブラウザ内で完結します。</p>
+        </div>
+    </div>
+
+    <div id="modal"><div class="modal-content">ライブラリの読み込みに失敗しました。インターネット接続を確認してください。</div></div>
+
+    <script>
+        function showErrorModal() { document.getElementById('modal').style.display = 'flex'; }
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('fileInput');
+        const editorZone = document.getElementById('editor-zone');
+        const targetImg = document.getElementById('target-img');
+        const cropBox = document.getElementById('crop-box');
+        const cropperContainer = document.getElementById('cropper');
+        const coordPanel = document.getElementById('coord-panel');
+        
+        const inputs = {
+            x: document.getElementById('valX'),
+            y: document.getElementById('valY'),
+            w: document.getElementById('valW'),
+            h: document.getElementById('valH')
+        };
+
+        let pendingFiles = [];
+        let actionState = 'none'; // 'none', 'creating', 'moving', 'resizing'
+        let resizeDir = '';
+        let startX, startY;
+        let initialBox = { x: 0, y: 0, w: 0, h: 0 };
+        let cropData = null; 
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', e => handleFiles(e.target.files));
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('hover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
+        dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('hover'); handleFiles(e.dataTransfer.files); });
+
+        function handleFiles(fileList) {
+            if (typeof JSZip === 'undefined') return showErrorModal();
+
+            const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+            if (files.length === 0) return;
+
+            pendingFiles = files;
+            
+            const reader = new FileReader();
+            reader.onload = e => {
+                targetImg.src = e.target.result;
+                dropZone.style.display = 'none';
+                editorZone.style.display = 'block';
+                cropBox.style.display = 'none';
+                coordPanel.style.display = 'none';
+                cropData = null;
+                document.getElementById('status').innerText = '';
+            };
+            reader.readAsDataURL(files[0]);
+        }
+
+        function getScale() {
+            if(!targetImg.width) return { x: 1, y: 1 };
+            return {
+                x: targetImg.naturalWidth / targetImg.width,
+                y: targetImg.naturalHeight / targetImg.height
+            };
+        }
+
+        function updateBoxStyle(x, y, w, h) {
+            const rect = cropperContainer.getBoundingClientRect();
+            
+            x = Math.max(0, Math.min(x, rect.width - w));
+            y = Math.max(0, Math.min(y, rect.height - h));
+            w = Math.max(0, Math.min(w, rect.width - x));
+            h = Math.max(0, Math.min(h, rect.height - y));
+
+            cropBox.style.left = x + 'px';
+            cropBox.style.top = y + 'px';
+            cropBox.style.width = w + 'px';
+            cropBox.style.height = h + 'px';
+            cropBox.style.display = 'block';
+            coordPanel.style.display = 'inline-flex';
+            
+            updateInputsFromBox(x, y, w, h);
+        }
+
+        function updateInputsFromBox(boxX, boxY, boxW, boxH) {
+            const scale = getScale();
+            inputs.x.value = Math.round(boxX * scale.x);
+            inputs.y.value = Math.round(boxY * scale.y);
+            inputs.w.value = Math.round(boxW * scale.x);
+            inputs.h.value = Math.round(boxH * scale.y);
+            
+            if (boxW > 0 && boxH > 0) {
+                cropData = {
+                    x: Number(inputs.x.value), y: Number(inputs.y.value),
+                    w: Number(inputs.w.value), h: Number(inputs.h.value)
+                };
+            }
+        }
+
+        function updateBoxFromInputs() {
+            const scale = getScale();
+            const ix = parseFloat(inputs.x.value) || 0;
+            const iy = parseFloat(inputs.y.value) || 0;
+            const iw = parseFloat(inputs.w.value) || 1;
+            const ih = parseFloat(inputs.h.value) || 1;
+
+            const boxX = ix / scale.x;
+            const boxY = iy / scale.y;
+            const boxW = iw / scale.x;
+            const boxH = ih / scale.y;
+
+            updateBoxStyle(boxX, boxY, boxW, boxH);
+        }
+
+        Object.values(inputs).forEach(input => {
+            input.addEventListener('input', updateBoxFromInputs);
+            input.addEventListener('change', updateBoxFromInputs);
+        });
+
+        cropperContainer.addEventListener('mousedown', e => {
+            e.preventDefault();
+            const rect = cropperContainer.getBoundingClientRect();
+            startX = e.clientX;
+            startY = e.clientY;
+
+            const boxX = parseFloat(cropBox.style.left) || 0;
+            const boxY = parseFloat(cropBox.style.top) || 0;
+            const boxW = parseFloat(cropBox.style.width) || 0;
+            const boxH = parseFloat(cropBox.style.height) || 0;
+            
+            initialBox = { x: boxX, y: boxY, w: boxW, h: boxH };
+
+            if (e.target.classList.contains('handle')) {
+                actionState = 'resizing';
+                resizeDir = e.target.getAttribute('data-dir');
+            } else if (e.target === cropBox) {
+                actionState = 'moving';
+            } else {
+                actionState = 'creating';
+                const curX = e.clientX - rect.left;
+                const curY = e.clientY - rect.top;
+                initialBox = { x: curX, y: curY, w: 0, h: 0 };
+                updateBoxStyle(curX, curY, 0, 0);
+            }
+        });
+
+        window.addEventListener('mousemove', e => {
+            if (actionState === 'none') return;
+            
+            const rect = cropperContainer.getBoundingClientRect();
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+
+            if (actionState === 'creating') {
+                const curX = e.clientX - rect.left;
+                const curY = e.clientY - rect.top;
+                const x = Math.min(initialBox.x, curX);
+                const y = Math.min(initialBox.y, curY);
+                const w = Math.abs(curX - initialBox.x);
+                const h = Math.abs(curY - initialBox.y);
+                updateBoxStyle(x, y, w, h);
+            } 
+            else if (actionState === 'moving') {
+                updateBoxStyle(initialBox.x + dx, initialBox.y + dy, initialBox.w, initialBox.h);
+            } 
+            else if (actionState === 'resizing') {
+                let { x, y, w, h } = initialBox;
+
+                if (resizeDir.includes('e')) w = initialBox.w + dx;
+                if (resizeDir.includes('s')) h = initialBox.h + dy;
+                if (resizeDir.includes('w')) { w = initialBox.w - dx; x = initialBox.x + dx; }
+                if (resizeDir.includes('n')) { h = initialBox.h - dy; y = initialBox.y + dy; }
+
+                if (w < 0) { w = 0; x = initialBox.x + initialBox.w; }
+                if (h < 0) { h = 0; y = initialBox.y + initialBox.h; }
+
+                updateBoxStyle(x, y, w, h);
+            }
+        });
+
+        window.addEventListener('mouseup', () => { actionState = 'none'; });
+
+        document.getElementById('crop-btn').addEventListener('click', async () => {
+            if (!cropData || cropData.w <= 0 || cropData.h <= 0) {
+                alert('切り抜く範囲を正しく指定してください。');
+                return;
+            }
+
+            const spinner = document.getElementById('spinner');
+            const status = document.getElementById('status');
+            editorZone.style.display = 'none';
+            spinner.style.display = 'block';
+            status.innerText = '処理中...';
+
+            const zip = new JSZip();
+            let processedCount = 0;
+
+            for (const file of pendingFiles) {
+                try {
+                    const blob = await processCrop(file, cropData);
+                    zip.file('cropped-' + file.name, blob);
+                    processedCount++;
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+
+            if (processedCount > 0) {
+                const link = document.createElement('a');
+                if (processedCount === 1) {
+                    const fileData = await zip.file(Object.keys(zip.files)[0]).async('blob');
+                    link.href = URL.createObjectURL(fileData);
+                    link.download = 'cropped-' + pendingFiles[0].name;
+                } else {
+                    const content = await zip.generateAsync({type: 'blob'});
+                    link.href = URL.createObjectURL(content);
+                    link.download = `croppedimages-${Date.now()}.zip`;
+                }
+                link.click();
+            }
+
+            spinner.style.display = 'none';
+            dropZone.style.display = 'flex';
+            status.innerText = '完了しました！';
+            setTimeout(() => status.innerText = '', 3000);
+            
+            pendingFiles = [];
+            cropData = null;
+            fileInput.value = '';
+            coordPanel.style.display = 'none';
+            cropBox.style.display = 'none';
+        });
+
+        function processCrop(file, crop) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = crop.w;
+                        canvas.height = crop.h;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
+                        canvas.toBlob(blob => {
+                            if (blob) resolve(blob);
+                            else reject(new Error("Blob conversion failed"));
+                        }, 'image/jpeg', 0.9);
+                    };
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+    </script>
+</body>
+</html>
