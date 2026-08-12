@@ -2151,8 +2151,18 @@
       let bearing = turf.bearing(recPoint, runnerPoint);
       if (bearing < 0) bearing += 360;
       
+      // 基準値を引いて相対方位角にする
       let relBearing = bearing - referenceBearing;
+      
+      // 一旦0〜360度の範囲に正規化
       if (relBearing < 0) relBearing += 360;
+      relBearing = relBearing % 360;
+      
+      // 180度より大きい場合はマイナス表記（0〜180、-180〜-0）に変換
+      if (relBearing > 180) {
+        relBearing -= 360;
+      }
+      
       bearingVal.innerText = relBearing.toFixed(1);
 
       const destPoint = turf.destination(recPoint, 50, bearing);
