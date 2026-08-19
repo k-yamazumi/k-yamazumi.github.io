@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link rel="icon" type="image/png" href="icon_marathon-rx.png">
+  <link rel="manifest" href="manifest_marathon-rx.json">
+  <meta name="theme-color" content="#007bff">
+  <link rel="apple-touch-icon" href="icon_marathon-rx_192.png">
   <title>マラソン受信アシスタント</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
@@ -186,6 +189,7 @@
     }
   </style>
 </head>
+
 <body>
 
   <div id="map"></div>
@@ -2256,6 +2260,19 @@
     });
 
     window.onload = initMap;
+  </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(registration => {
+            console.log('ServiceWorker 登録成功');
+          })
+          .catch(err => {
+            console.log('ServiceWorker 登録失敗: ', err);
+          });
+      });
+    }
   </script>
 </body>
 </html>
