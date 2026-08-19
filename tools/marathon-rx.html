@@ -228,10 +228,10 @@
 
   <!-- 受信地点リスト用モーダル -->
   <div id="list-modal-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center;">
-    <div id="modal-content" style="max-height: 80vh; display: flex; flex-direction: column;">
+    <div id="modal-content" style="max-height: 80vh; overflow-y: auto;">
       <h3 style="margin-top:0;">受信地点リスト</h3>
-      <div id="rx-list-container" style="overflow-y: auto; flex: 1;"></div>
-      <button class="modal-btn modal-cancel" id="btn-list-cancel" style="margin-top: 15px;">キャンセル</button>
+      <div id="rx-list-container"></div>
+      <button class="modal-btn modal-cancel" id="btn-list-cancel">キャンセル</button>
     </div>
   </div>
   
