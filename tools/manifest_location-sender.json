@@ -1,0 +1,21 @@
+{
+  "name": "位置情報送信 - マラソンアシスタント",
+  "short_name": "位置送信",
+  "start_url": "./location-sender.html",
+  "display": "standalone",
+  "background_color": "#f8f9fa",
+  "theme_color": "#28a745",
+  "icons": [
+    {
+      "src": "icon_location-sender_192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon_location-sender.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

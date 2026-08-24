@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>位置情報送信 - マラソンアシスタント</title>
+  
+  <!-- ファビコンの設定 -->
+  <link rel="icon" type="image/png" href="icon_location-sender.png">
+  
+  <!-- PWA用のマニフェスト -->
+  <link rel="manifest" href="manifest_location-sender.json">
+  
+  <!-- 外部CSSの読み込み -->
+  <link rel="stylesheet" href="style_location-sender.css">
+</head>
+<body>
+
+  <div class="card">
+    <h2>位置情報 共有パネル</h2>
+    
+    <div class="form-group">
+      <label for="input-name">表示名 (例: 1号車)</label>
+      <input type="text" id="input-name" placeholder="名前を入力してください">
+    </div>
+
+    <button id="btn-start" class="btn btn-start">共有を開始する</button>
+    <button id="btn-stop" class="btn btn-stop">共有を停止する</button>
+    <button id="btn-power" class="btn btn-power">省電力モード（画面オフ）</button>
+
+    <div class="status-box">
+      <!-- 内部IDとWake Lockの表示を削除（コンソールに出力） -->
+      <p><strong>状態:</strong> <span id="disp-status" style="color:red;">停止中</span></p>
+      <p><strong>最終送信:</strong> <span id="disp-time">--</span></p>
+      <p><strong>座標:</strong> <span id="disp-coord">--</span></p>
+    </div>
+  </div>
+
+  <!-- 省電力モード画面 -->
+  <div id="power-overlay">
+    <div style="font-size: 24px; font-weight: bold; margin-bottom: 20px;">省電力モード</div>
+    <div style="font-size: 16px;">画面をタップして解除</div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+    import { getDatabase, ref, set, remove, onDisconnect } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBLmHwEe28RTIdwI3BytDhaX15GBEgqnnA",
+      authDomain: "marathon-rx2026.firebaseapp.com",
+      databaseURL: "https://marathon-rx2026-default-rtdb.firebaseio.com",
+      projectId: "marathon-rx2026",
+      storageBucket: "marathon-rx2026.firebasestorage.app",
+      messagingSenderId: "184738315315",
+      appId: "1:184738315315:web:7e7c497d13c61a868d3746"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // 内部IDの生成・取得 (端末を識別するため)
+    let deviceId = localStorage.getItem('marathon_sender_id');
+    if (!deviceId) {
+      deviceId = 'id_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('marathon_sender_id', deviceId);
+    }
+    console.log("内部ID:", deviceId);
+
+    // UI要素
+    const inputName = document.getElementById('input-name');
+    const btnStart = document.getElementById('btn-start');
+    const btnStop = document.getElementById('btn-stop');
+    const btnPower = document.getElementById('btn-power');
+    const powerOverlay = document.getElementById('power-overlay');
+    const dispStatus = document.getElementById('disp-status');
+    const dispTime = document.getElementById('disp-time');
+    const dispCoord = document.getElementById('disp-coord');
+
+    // 状態管理変数
+    let watchId = null;
+    let wakeLock = null;
+    let isSharing = false;
+    let lastSendTime = 0;
+    const SEND_INTERVAL = 5000; // Firebaseへの書き込み間隔 (ミリ秒)
+
+    // 初期値の復元
+    const savedName = localStorage.getItem('marathon_sender_name');
+    if (savedName) inputName.value = savedName;
+
+    inputName.addEventListener('change', () => {
+      localStorage.setItem('marathon_sender_name', inputName.value);
+    });
+
+    // Firebaseパスの参照
+    const dbRef = ref(db, 'active_locations/' + deviceId);
+
+    // -------------------------
+    // Service Workerの登録
+    // -------------------------
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw_location-sender.js')
+          .then(registration => {
+            console.log('ServiceWorker 登録成功');
+          })
+          .catch(err => {
+            console.log('ServiceWorker 登録失敗: ', err);
+          });
+      });
+    }
+
+    // -------------------------
+    // 共有開始・停止の処理
+    // -------------------------
+    btnStart.addEventListener('click', async () => {
+      if (!inputName.value.trim()) {
+        alert("表示名を入力してください。");
+        return;
+      }
+      
+      try {
+        await requestWakeLock();
+        startTracking();
+        
+        // オフラインになった時にデータベースから自機の情報を自動削除
+        onDisconnect(dbRef).remove();
+
+        isSharing = true;
+        btnStart.style.display = 'none';
+        btnStop.style.display = 'block';
+        btnPower.style.display = 'block';
+        dispStatus.innerText = '共有中...';
+        dispStatus.style.color = '#28a745';
+        inputName.disabled = true;
+
+      } catch (err) {
+        alert("エラーが発生しました: " + err.message);
+      }
+    });
+
+    btnStop.addEventListener('click', stopSharing);
+
+    function stopSharing() {
+      if (watchId) navigator.geolocation.clearWatch(watchId);
+      releaseWakeLock();
+      
+      // DBから自機の情報を手動削除
+      remove(dbRef);
+
+      isSharing = false;
+      watchId = null;
+      btnStart.style.display = 'block';
+      btnStop.style.display = 'none';
+      btnPower.style.display = 'none';
+      dispStatus.innerText = '停止中';
+      dispStatus.style.color = 'red';
+      dispTime.innerText = '--';
+      dispCoord.innerText = '--';
+      inputName.disabled = false;
+    }
+
+    // -------------------------
+    // GPS位置情報の取得と送信
+    // -------------------------
+    function startTracking() {
+      if (!navigator.geolocation) {
+        alert("このブラウザはGPSに対応していません。");
+        return;
+      }
+
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const now = Date.now();
+          if (now - lastSendTime >= SEND_INTERVAL) {
+            sendLocationToFirebase(position);
+            lastSendTime = now;
+          }
+        },
+        (error) => {
+          console.warn("GPSエラー:", error.message);
+          dispCoord.innerText = "取得エラー";
+        },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+      );
+    }
+
+    function sendLocationToFirebase(pos) {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const heading = pos.coords.heading !== null && !isNaN(pos.coords.heading) ? pos.coords.heading : 0; 
+      
+      const payload = {
+        name: inputName.value.trim(),
+        lat: lat,
+        lng: lng,
+        heading: heading,
+        timestamp: Date.now()
+      };
+
+      set(dbRef, payload)
+        .then(() => {
+          const d = new Date();
+          dispTime.innerText = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
+          dispCoord.innerText = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        })
+        .catch(error => {
+          console.error("Firebase送信エラー:", error);
+          dispStatus.innerText = "送信エラー";
+          dispStatus.style.color = "orange";
+        });
+    }
+
+    // -------------------------
+    // Screen Wake Lock API の制御
+    // -------------------------
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+          console.log('Wake Lock: 有効');
+          
+          wakeLock.addEventListener('release', () => {
+            console.log('Wake Lock: 無効化されました');
+          });
+        } catch (err) {
+          console.error(`Wake Lock エラー: ${err.name}, ${err.message}`);
+        }
+      } else {
+        console.warn('Wake Lock API: 非対応ブラウザ');
+      }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock !== null) {
+        wakeLock.release().then(() => { wakeLock = null; });
+      }
+    }
+
+    document.addEventListener('visibilitychange', async () => {
+      if (wakeLock !== null && document.visibilityState === 'visible' && isSharing) {
+        await requestWakeLock();
+      }
+    });
+
+    // -------------------------
+    // 省電力モード（黒画面）
+    // -------------------------
+    btnPower.addEventListener('click', () => {
+      powerOverlay.style.display = 'flex';
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(()=>{});
+      }
+    });
+
+    powerOverlay.addEventListener('click', () => {
+      powerOverlay.style.display = 'none';
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(()=>{});
+      }
+    });
+
+  </script>
+</body>
+</html>
