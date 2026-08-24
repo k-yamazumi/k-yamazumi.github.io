@@ -1,6 +1,7 @@
 # k-yamazumi.github.io
 ## マラソン受信アシスタント
 - [https://k-yamazumi.github.io/tools/marathon-rx.html](https://k-yamazumi.github.io/tools/marathon-rx.html)
+- [https://k-yamazumi.github.io/tools/location-sender.html](https://k-yamazumi.github.io/tools/location-sender.html)
 ## OBS 24H配信オーバーレイ
 - 設定ページ  [https://k-yamazumi.github.io/news-uhb/setting.html](https://k-yamazumi.github.io/news-uhb/setting.html)
 ## 日付指定カウントダウン
