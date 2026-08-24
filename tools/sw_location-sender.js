@@ -3,7 +3,8 @@ const urlsToCache = [
   './location-sender.html',
   './style_location-sender.css',
   './manifest_location-sender.json',
-  './icon_location-sender.png'
+  './icon_location-sender.png',
+  './icon_location-sender_192.png'
 ];
 
 // インストール時にキャッシュする
