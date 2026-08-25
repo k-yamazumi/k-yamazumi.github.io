@@ -123,7 +123,7 @@
     let distanceMarkersLayer = L.layerGroup();
     let landmarksLayer = L.layerGroup();
     
-    // 追加: ターゲット（Firebase連携）マーカー
+    // ターゲット（Firebase連携）マーカー
     let targetLiveMarker = null;
     let staleCheckInterval = null;
     
@@ -186,7 +186,7 @@
       rxListContainer.appendChild(btn);
     });
     
-    // --- 追加: マップ変更用ロジック ---
+    // --- マップ変更用ロジック ---
     const mapModalOverlay = document.getElementById('map-modal-overlay');
     const mapListModalOverlay = document.getElementById('map-list-modal-overlay');
     const mapListContainer = document.getElementById('map-list-container');
@@ -210,12 +210,9 @@
       mapListModalOverlay.style.display = 'none';
     });
 
-    // フォルダ内のKMLファイルリスト
-    // ※ブラウザのセキュリティ仕様上、JSでローカルフォルダの中身を自動取得することはできないため、
-    // ここに kmlフォルダに入っているファイル名（拡張子なし）を手動で定義してください。
     const mapFiles = [
-      // kmlフォルダに入っているファイル名（拡張子なし）をここに追加してください
-      // 例: "sapporo_marathon", "test_route"
+      // kmlフォルダに入っているファイル名（拡張子なし）をここに追加
+      // 例: "北海道マラソン", "test_route"
     ];
 
     mapFiles.forEach(filename => {
@@ -225,7 +222,8 @@
       btn.innerText = filename;
       btn.onclick = () => {
         mapListModalOverlay.style.display = 'none';
-        loadKmlFromUrl(`kml/${filename}.kml`);
+        // 日本語ファイル名エラーを防ぐためエンコードし、相対パス(./)を明示
+        loadKmlFromUrl(`./kml/${encodeURIComponent(filename)}.kml`);
       };
       mapListContainer.appendChild(btn);
     });
@@ -280,7 +278,7 @@
           const fetchedUsers = snapshot.val() || {};
           const currentSelected = userSelect.value;
           
-          // ① 選択中のユーザーがFirebaseから消えた場合でも、最後に取得したデータを維持する
+          // 選択中のユーザーがFirebaseから消えた場合でも、最後に取得したデータを維持する
           if (currentSelected !== 'manual' && !fetchedUsers[currentSelected] && window.lastSelectedUserData) {
             fetchedUsers[currentSelected] = window.lastSelectedUserData;
           }
