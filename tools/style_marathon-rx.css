@@ -1,3 +1,6 @@
+/* =========================================
+   1. Base & Layout
+========================================= */
 body { 
   margin: 0; 
   padding: 0; 
@@ -47,6 +50,9 @@ body {
   }
 }
 
+/* =========================================
+   2. UI Components (Buttons, Sliders, etc.)
+========================================= */
 .btn {
   display: inline-block;
   background: #007bff;
@@ -79,10 +85,61 @@ body {
   font-size: 13px;
 }
 
+#toast {
+  display: none;
+  position: absolute;
+  top: 20px; 
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.8);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 5px;
+  z-index: 3000;
+  font-size: 14px;
+}
+
+/* --- プルダウンおよびターゲット情報 --- */
+.form-group-select {
+  margin-bottom: 2px;
+  text-align: left;
+}
+.form-group-select label {
+  font-size: 13px;
+  font-weight: bold;
+  color: #555;
+  display: block;
+  margin-bottom: 2px;
+}
+.form-group-select select {
+  width: 100%;
+  padding: 6px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+#target-info {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+  display: none;
+}
+.stale-data {
+  color: #dc3545 !important;
+  font-weight: bold;
+}
+
+/* =========================================
+   3. Modals
+========================================= */
 #modal-overlay {
   display: none;
   position: absolute;
-  top: 0; left: 0; width: 100vw; height: 100vh;
+  top: 0; 
+  left: 0; 
+  width: 100vw; 
+  height: 100vh;
   background: rgba(0,0,0,0.5);
   z-index: 2000;
   justify-content: center;
@@ -96,6 +153,7 @@ body {
   width: 80%;
   max-width: 300px;
 }
+
 .modal-btn {
   display: block;
   width: 100%;
@@ -110,49 +168,36 @@ body {
   font-weight: bold;
 }
 .modal-btn:hover { background: #218838; }
+
 .modal-cancel { background: #6c757d; }
 .modal-cancel:hover { background: #5a6268; }
 
-#toast {
-  display: none;
-  position: absolute;
-  top: 20px; left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0,0,0,0.8);
-  color: white;
-  padding: 10px 20px;
-  border-radius: 5px;
-  z-index: 3000;
-  font-size: 14px;
-}
-
+/* =========================================
+   4. Map Markers
+========================================= */
 /* Googleマップ風ランドマークスタイル */
 .landmark-container {
   display: flex;
   align-items: center;
-  /* 点の中心が座標に合うように調整 */
-  transform: translate(-6px, -6px);
+  transform: translate(-6px, -6px); /* 点の中心が座標に合うように調整 */
   pointer-events: none;
 }
-
 .landmark-point {
   width: 8px;
   height: 8px;
-  /* background-color: #555; から赤色に変更 */
   background-color: #ea4335; 
   border: 2px solid white;
   border-radius: 50%;
   box-shadow: 0 1px 3px rgba(0,0,0,0.4);
   flex-shrink: 0;
 }
-
 .landmark-text {
   margin-left: 4px;
   font-weight: bold;
   font-size: 13px;
   color: #222;
   white-space: nowrap;
-  /* 文字の周りに白抜きの縁取りをつけて地図上での視認性を高める */
+  /* 文字の周りに白抜きの縁取りをつけて視認性を高める */
   text-shadow: 
     1.5px 1.5px 0 rgba(255,255,255,0.9), 
     -1.5px -1.5px 0 rgba(255,255,255,0.9),
@@ -202,7 +247,19 @@ body {
   z-index: 3;
 }
 
-/* 印刷時用スタイル（操作UIを非表示） */
+/* Firebaseから取得した緑マーカー用のスタイル */
+.target-live-marker {
+  width: 14px;
+  height: 14px;
+  background-color: #28a745;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 4px rgba(0,0,0,0.5);
+}
+
+/* =========================================
+   5. Print Styles
+========================================= */
 @media print {
   body {
     display: block;
@@ -210,7 +267,13 @@ body {
     padding: 0;
   }
   /* パネル、モーダル、トースト、地図のズームボタン等を非表示 */
-  #ui-panel, #modal-overlay, #list-modal-overlay, #toast, .leaflet-control-container {
+  #ui-panel, 
+  #modal-overlay, 
+  #list-modal-overlay, 
+  #map-modal-overlay,
+  #map-list-modal-overlay,
+  #toast, 
+  .leaflet-control-container {
     display: none !important;
   }
   #map {
