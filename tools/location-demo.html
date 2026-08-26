@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>位置情報送信デモ</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #f4f4f9;
+      padding: 20px;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+    }
+    .card {
+      background: #fff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 400px;
+    }
+    h2 {
+      text-align: center;
+      margin-top: 0;
+      font-size: 1.2rem;
+      color: #333;
+    }
+    .form-group {
+      margin-bottom: 25px;
+    }
+    label {
+      display: flex;
+      justify-content: space-between;
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #555;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 16px;
+    }
+    input[type="range"] {
+      width: 100%;
+      margin: 10px 0;
+    }
+    .btn-toggle {
+      width: 100%;
+      padding: 15px;
+      font-size: 18px;
+      font-weight: bold;
+      color: white;
+      background-color: #007bff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    .btn-toggle.active {
+      background-color: #dc3545;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>デモ用 配信パネル</h2>
+    
+    <!-- 表示名入力欄 -->
+    <div class="form-group">
+      <label for="input-name">表示名</label>
+      <input type="text" id="input-name" placeholder="例: デモ1号車">
+    </div>
+
+    <!-- 移動速度設定バー -->
+    <div class="form-group">
+      <label for="input-speed">移動速度 <span><span id="speed-val">10</span> km/h</span></label>
+      <input type="range" id="input-speed" min="1" max="100" value="10">
+    </div>
+
+    <!-- デモ開始／終了ボタン -->
+    <button id="btn-toggle" class="btn-toggle">デモ開始</button>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+    import { getDatabase, ref, set, remove, onDisconnect } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBLmHwEe28RTIdwI3BytDhaX15GBEgqnnA",
+      authDomain: "marathon-rx2026.firebaseapp.com",
+      databaseURL: "https://marathon-rx2026-default-rtdb.firebaseio.com",
+      projectId: "marathon-rx2026",
+      storageBucket: "marathon-rx2026.firebasestorage.app",
+      messagingSenderId: "184738315315",
+      appId: "1:184738315315:web:7e7c497d13c61a868d3746"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // KML座標データ
+    const kmlData = `
+      141.3520225828147,43.06077816453088,0
+      141.3550304780618,43.04883750724196,0
+      141.356621610518,43.04905028902109,0
+      141.3567559697826,43.048384604821,0
+      141.3563997222427,43.04680803218064,0
+      141.3563529000859,43.04647529087169,0
+      141.3564211447426,43.04613149560833,0
+      141.3566496355714,43.04533064677647,0
+      141.3565748690631,43.0446616417854,0
+      141.3565439750388,43.04398789925014,0
+      141.3565226134908,43.0426389875352,0
+      141.3564882917632,43.04186907153924,0
+      141.3563613729451,43.04111809503893,0
+      141.3560813399244,43.04019809583574,0
+      141.3586901241934,43.03885720851088,0
+      141.3583352636207,43.03841296210911,0
+      141.3580305215189,43.03791695564234,0
+      141.3575237964338,43.03692901770862,0
+      141.3571859271808,43.03593362103348,0
+      141.3570196121978,43.03498688341446,0
+      141.3570384640243,43.03335688048139,0
+      141.3572309235038,43.03173404462853,0
+      141.3572192734544,43.03102411463518,0
+      141.3570603618278,43.03030074135442,0
+      141.3564036442514,43.02896272988217,0
+      141.3584760544829,43.02783400268913,0
+      141.3679860874438,43.02678795908363,0
+      141.3688890701343,43.0330986517536,0
+      141.3698729025624,43.03936953971036,0
+      141.3701419355021,43.04084452860911,0
+      141.370263536786,43.04170362115912,0
+      141.370258139429,43.04230077998187,0
+      141.3685967349757,43.04942748573735,0
+      141.3690436641361,43.049829867893,0
+      141.3663219398407,43.05149412498936,0
+      141.359037739801,43.05315170188296,0
+      141.3588355266354,43.05341368275887,0
+      141.3567017666062,43.06166669314793,0
+      141.3550042850204,43.06849510005762,0
+      141.3532041409603,43.07529184222086,0
+      141.3528599338411,43.07651181843183,0
+      141.3498249555713,43.0911215264592,0
+      141.3281813533185,43.08810226425395,0
+      141.3277534083457,43.0877901681153,0
+      141.327371859626,43.08744181465006,0
+      141.3202831732371,43.09255662085719,0
+      141.328415001671,43.1018812016102,0
+      141.3139192384134,43.10986817530824,0
+      141.3054833446009,43.11457685020157,0
+      141.2990798285706,43.10840200941796,0
+      141.2988360027806,43.10854868832324,0
+      141.2940040771484,43.11222160194359,0
+      141.2895738602949,43.11538913809225,0
+      141.2870062239641,43.1174380826476,0
+      141.2849652206656,43.1187584743536,0
+      141.284155566728,43.11932190680729,0
+      141.2797881276867,43.12247472144347,0
+      141.2749455551921,43.12603051878633,0
+      141.2719344913127,43.1281604255245,0
+      141.2640871960471,43.13385520319429,0
+      141.2603534973924,43.13646257549932,0
+      141.2492694238548,43.14447522559801,0
+      141.2451367919605,43.14753564056945,0
+      141.2415677931808,43.15014064499564,0
+      141.241444143144,43.15005408586519,0
+      141.2451716595953,43.1473565939872,0
+      141.2470225682266,43.14596195347446,0
+      141.2538391440241,43.14099902494487,0
+      141.261920910437,43.13520413618131,0
+      141.2703404489434,43.12916017702076,0
+      141.2822848426927,43.12051058392705,0
+      141.2868586477537,43.11731989119301,0
+      141.2899622916498,43.11495444988352,0
+      141.2931797573463,43.11263118141692,0
+      141.29577265417,43.110745410798,0
+      141.2974793471297,43.10950258578731,0
+      141.2990352049733,43.10817247127741,0
+      141.3054949806583,43.11445409240278,0
+      141.328245529173,43.10188120093748,0
+      141.3201952953002,43.09254663082816,0
+      141.3273847948801,43.08734728590994,0
+      141.3290283834976,43.08620075704243,0
+      141.3295299207128,43.08575110618631,0
+      141.3298110815523,43.08518724521922,0
+      141.3298854936944,43.08479029362315,0
+      141.3298385767137,43.0842279168275,0
+      141.3298100053491,43.08366551195327,0
+      141.334613963389,43.08425235334636,0
+      141.3347493929065,43.0842289973885,0
+      141.3348177093345,43.08413380005414,0
+      141.3350227964692,43.08331634909567,0
+      141.3375832088399,43.08362913865962,0
+      141.3378912220228,43.08213806919771,0
+      141.3394311491895,43.08228287966101,0
+      141.3398996873328,43.0807715749637,0
+      141.3399467224354,43.08070445794829,0
+      141.3400536867953,43.08066682761246,0
+      141.3404378826197,43.0806988322709,0
+      141.3404995722462,43.08064435762432,0
+      141.3405861143243,43.08061264717505,0
+      141.3421581745981,43.0744917929995,0
+      141.3431354826712,43.07088407407063,0
+      141.343102583281,43.07073105076271,0
+      141.3431341731732,43.07068163955263,0
+      141.3432263797935,43.07067913454184,0
+      141.3432808001821,43.07072376559496,0
+      141.3433286896198,43.0708002456656,0
+      141.3440427032014,43.07110865548635,0
+      141.3446323241658,43.07126699575127,0
+      141.3449913887453,43.0712511288855,0
+      141.3462338373227,43.07092488492579,0
+      141.3462829575242,43.07071466761954,0
+      141.3476883197617,43.06520782331599,0
+      141.3478298218204,43.06497643863064,0
+      141.3479624709123,43.06475889092851,0
+      141.3481285156731,43.06455996110128,0
+      141.3484086602958,43.064309030909,0
+      141.3489139671549,43.06417288230707,0
+      141.3492664891669,43.06413646658469,0
+      141.3496261699297,43.06415944474004,0
+      141.3512106143628,43.06436769016367,0
+      141.3515264041515,43.06313303069361,0
+      141.352129427436,43.06071132790314,0
+    `;
+
+    // 内部IDの生成
+    let deviceId = localStorage.getItem('marathon_demo_sender_id');
+    if (!deviceId) {
+      deviceId = 'demo_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('marathon_demo_sender_id', deviceId);
+    }
+
+    const inputName = document.getElementById('input-name');
+    const inputSpeed = document.getElementById('input-speed');
+    const speedVal = document.getElementById('speed-val');
+    const btnToggle = document.getElementById('btn-toggle');
+
+    // UIの初期値復元とイベント
+    const savedName = localStorage.getItem('marathon_demo_name');
+    if (savedName) inputName.value = savedName;
+    inputName.addEventListener('change', () => localStorage.setItem('marathon_demo_name', inputName.value));
+    
+    inputSpeed.addEventListener('input', () => {
+      speedVal.innerText = inputSpeed.value;
+    });
+
+    const dbRef = ref(db, 'active_locations/' + deviceId);
+    const SEND_INTERVAL_MS = 3000; // 3秒に1回送信
+
+    // --- 座標計算ロジック ---
+    let route = [];
+    let currentDistance = 0;
+    let demoTimer = null;
+    let isSharing = false;
+
+    // 2点間の距離を計算 (Haversine formula)
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const φ1 = lat1 * Math.PI/180;
+      const φ2 = lat2 * Math.PI/180;
+      const Δφ = (lat2-lat1) * Math.PI/180;
+      const Δλ = (lon2-lon1) * Math.PI/180;
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+    }
+
+    // 2点間の方位を計算
+    function getBearing(lat1, lon1, lat2, lon2) {
+      const y = Math.sin((lon2 - lon1) * Math.PI/180) * Math.cos(lat2 * Math.PI/180);
+      const x = Math.cos(lat1 * Math.PI/180) * Math.sin(lat2 * Math.PI/180) - Math.sin(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.cos((lon2 - lon1) * Math.PI/180);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    // KML文字列のパースと累積距離の計算
+    function parseKML() {
+      const coords = [];
+      const lines = kmlData.trim().split(/\s+/);
+      lines.forEach(line => {
+        const parts = line.split(',');
+        if (parts.length >= 2) coords.push({ lng: parseFloat(parts[0]), lat: parseFloat(parts[1]) });
+      });
+
+      let dist = 0;
+      for (let i = 0; i < coords.length; i++) {
+        if (i > 0) dist += getDistance(coords[i-1].lat, coords[i-1].lng, coords[i].lat, coords[i].lng);
+        route.push({ lat: coords[i].lat, lng: coords[i].lng, dist: dist });
+      }
+    }
+
+    // 現在の進行距離における座標と方位を算出
+    function getPositionAt(targetDist) {
+      if (route.length === 0) return null;
+      const totalDist = route[route.length - 1].dist;
+      targetDist = targetDist % totalDist; // コースをループさせる
+
+      for (let i = 0; i < route.length - 1; i++) {
+        if (targetDist >= route[i].dist && targetDist <= route[i+1].dist) {
+          const segmentDist = route[i+1].dist - route[i].dist;
+          const ratio = segmentDist === 0 ? 0 : (targetDist - route[i].dist) / segmentDist;
+          return {
+            lat: route[i].lat + (route[i+1].lat - route[i].lat) * ratio,
+            lng: route[i].lng + (route[i+1].lng - route[i].lng) * ratio,
+            heading: getBearing(route[i].lat, route[i].lng, route[i+1].lat, route[i+1].lng)
+          };
+        }
+      }
+      return { lat: route[0].lat, lng: route[0].lng, heading: 0 };
+    }
+
+    // --- 配信制御 ---
+    function sendLocation(pos) {
+      if (!pos) return;
+      set(dbRef, {
+        name: inputName.value.trim(),
+        lat: pos.lat,
+        lng: pos.lng,
+        heading: pos.heading,
+        timestamp: Date.now()
+      }).catch(err => console.error("Firebase送信エラー:", err));
+    }
+
+    function toggleDemo() {
+      if (!isSharing) {
+        if (!inputName.value.trim()) return alert("表示名を入力してください。");
+        if (route.length === 0) parseKML();
+
+        isSharing = true;
+        inputName.disabled = true;
+        btnToggle.innerText = 'デモ終了';
+        btnToggle.classList.add('active');
+        onDisconnect(dbRef).remove();
+
+        // 設定した時間ごとの送信ループ
+        demoTimer = setInterval(() => {
+          const speedKmh = parseFloat(inputSpeed.value);
+          const moveDist = (speedKmh * 1000 / 3600) * (SEND_INTERVAL_MS / 1000); // 送信間隔ごとの移動距離(m)
+          currentDistance += moveDist;
+          sendLocation(getPositionAt(currentDistance));
+        }, SEND_INTERVAL_MS);
+
+        // 開始直後に1回送信
+        sendLocation(getPositionAt(currentDistance));
+
+      } else {
+        isSharing = false;
+        inputName.disabled = false;
+        btnToggle.innerText = 'デモ開始';
+        btnToggle.classList.remove('active');
+        
+        clearInterval(demoTimer);
+        remove(dbRef);
+      }
+    }
+
+    btnToggle.addEventListener('click', toggleDemo);
+
+  </script>
+</body>
+</html>
