@@ -10,6 +10,18 @@
   <title>マラソン受信アシスタント</title>
   <link rel="stylesheet" href="style_marathon-rx.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  
+  <style>
+    /* 応急処置：iOS Safariの地図貫通バグを強制ブロックし、モーダルを最前面へ */
+    div[id$="-overlay"] {
+      position: fixed !important;
+      z-index: 999999 !important;
+      transform: translateZ(1px) !important; /* スマホ特有の3Dレイヤー突き抜けを防止 */
+    }
+    #map {
+      z-index: 0 !important;
+    }
+  </style>
 </head>
 
 <body>
