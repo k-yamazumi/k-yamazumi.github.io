@@ -1,4 +1,4 @@
-const CACHE_NAME = 'marathon-rx-v20260830-2';
+const CACHE_NAME = 'marathon-rx-v20260830-final';
 const urlsToCache = [
   './marathon-rx.html',
   './manifest_marathon-rx.json',
