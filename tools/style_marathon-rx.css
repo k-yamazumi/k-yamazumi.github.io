@@ -11,6 +11,14 @@ body {
   height: 100vh;
   height: 100dvh;
   background: #f8f9fa;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* フォーム要素は選択・操作を許可 */
+input, select, textarea {
+  -webkit-user-select: auto;
+  user-select: auto;
 }
 
 #map { 
