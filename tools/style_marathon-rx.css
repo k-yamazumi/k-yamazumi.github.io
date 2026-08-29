@@ -144,18 +144,35 @@ input, select, textarea {
 /* =========================================
    3. Modals
 ========================================= */
-#modal-overlay {
+#modal-overlay,
+#map-modal-overlay,
+#map-list-modal-overlay,
+#list-modal-overlay,
+#settings-modal-overlay,
+#compass-modal-overlay {
   display: none;
-  position: absolute;
-  top: 0; 
-  left: 0; 
-  width: 100vw; 
-  height: 100vh;
-  background: rgba(0,0,0,0.5);
-  z-index: 2000;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  z-index: 999999 !important;
   justify-content: center;
   align-items: center;
 }
+
+/* コンパス補正モーダルだけは上寄せ配置を維持するための例外処理 */
+#compass-modal-overlay {
+  align-items: flex-start !important;
+  padding-top: 60px !important;
+  background: transparent !important;
+  pointer-events: none !important;
+}
+#compass-modal-content {
+  pointer-events: auto !important;
+}
+
 #modal-content {
   background: white;
   padding: 20px;
