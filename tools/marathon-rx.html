@@ -169,7 +169,7 @@
           wakeLock = await navigator.wakeLock.request('screen');
           isManualRelease = false;
           
-          btnToggleWakeLock.innerText = '画面スリープ (ON)';
+          btnToggleWakeLock.innerText = '画面スリープ無効化 (ON)';
           btnToggleWakeLock.style.background = '#dc3545'; // ON時は赤色で強調
           
           // OS側で強制解放された場合のUIリセット処理
@@ -194,7 +194,7 @@
 
     const resetWakeLockUI = () => {
       wakeLock = null;
-      btnToggleWakeLock.innerText = '画面スリープ (OFF)';
+      btnToggleWakeLock.innerText = '画面スリープ無効化 (OFF)';
       btnToggleWakeLock.style.background = '#343a40'; // OFF時はグレー
     };
 
