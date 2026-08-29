@@ -28,7 +28,7 @@
       <label><input type="checkbox" id="chk-landmark" checked> ランドマーク</label>
     </div>
     
-    <!-- 追加: 共有ユーザー選択プルダウン -->
+    <!-- 共有ユーザー選択プルダウン -->
     <div class="form-group-select">
       <select id="user-select">
         <option value="manual">手動設定</option>
@@ -43,10 +43,11 @@
     
     <div id="info-display">
       方位角: <span id="bearing-val" style="color:#d9534f; font-size:20px;">--</span> 度<br>
-      <button class="btn" id="btn-set-zero" style="padding: 6px 10px; font-size: 12px; margin-top: 5px; background-color:#ff9800;">現在の位置を基準(0度)にする</button>
-      <button class="btn" id="btn-settings" style="padding: 6px 10px; font-size: 16px; background-color:#6c757d;">⚙️</button>
+      <div style="display: flex; align-items: stretch; gap: 4px; margin-top: 5px;">
+        <button class="btn" id="btn-set-zero" style="flex: 1; padding: 6px 10px; font-size: 12px; margin: 0; background-color:#ff9800;">現在の位置を基準(0度)にする</button>
+        <button class="btn" id="btn-settings" style="width: 40px; padding: 0; font-size: 16px; margin: 0; background-color:#6c757d; display: flex; align-items: center; justify-content: center;">⚙️</button>
+      </div>
     </div>
-  </div>
 
   <!-- マップ変更モーダル -->
   <div id="map-modal-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center;">
@@ -90,11 +91,39 @@
   <div id="settings-modal-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center;">
     <div id="settings-modal-content" style="background: white; padding: 20px; border-radius: 10px; text-align: center; width: 80%; max-width: 300px;">
       <h3 style="margin-top:0;">設定</h3>
-      <div class="settings-group" style="margin-bottom: 20px;">
-        <button class="modal-btn" id="btn-toggle-wakelock" style="background: #6c757d;">画面スリープ (OFF)</button>
+
+      <!-- 画面スリープ無効化 -->
+      <button class="modal-btn" id="btn-toggle-wakelock" style="background: #343a40;">画面スリープ無効化 (OFF)</button>
+
+      <!-- 地図背景の切り替え -->
+      <button class="modal-btn" id="btn-toggle-maptile" style="background: #17a2b8;">地図背景 (標準)</button>
+
+      <!-- コンパス補正ボタン -->
+      <button class="modal-btn" id="btn-open-compass-modal" style="background: #17a2b8;">コンパス補正(向き)</button>
+
+      <!-- オフライン用データ保存 -->
+      <button class="modal-btn" id="btn-save-cache" style="background: #17a2b8;">オフライン用データを保存</button>
+      
+      <button class="modal-btn modal-cancel" id="btn-settings-cancel">閉じる</button>
+    </div>
+  </div>
+
+  <!-- コンパス補正用モーダル（背景透明） -->
+  <div id="compass-modal-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: transparent; z-index: 4000; justify-content: center; align-items: flex-start; padding-top: 60px; pointer-events: none;">
+    <div id="compass-modal-content" style="background: rgba(255, 255, 255, 0.95); padding: 12px 15px; border-radius: 8px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.3); pointer-events: auto; width: 220px; position: relative;">
+      <div style="font-size: 12px; font-weight: bold; color: #333; margin-bottom: 5px;">コンパス補正: <span id="compass-offset-val">0</span>度</div>
+      
+      <!-- スライダー本体 -->
+      <div style="position: relative; z-index: 1;">
+        <input type="range" id="slider-compass-offset" min="-180" max="180" step="1" value="0" style="width: 100%; margin-bottom: 20px;">
       </div>
       
-      <button class="modal-btn modal-cancel" id="btn-settings-cancel">キャンセル</button>
+      <!-- ボタン群 -->
+      <div style="display: flex; gap: 8px; position: relative; z-index: 10;">
+        <button class="btn" id="btn-compass-ok" style="flex: 1; padding: 10px 6px; font-size: 14px; background: #28a745; touch-action: manipulation;">決定</button>
+        <button class="btn modal-cancel" id="btn-compass-cancel" style="flex: 1; padding: 10px 6px; font-size: 14px; background: #6c757d; touch-action: manipulation;">キャンセル</button>
+      </div>
+
     </div>
   </div>
   
@@ -152,7 +181,7 @@
     const resetWakeLockUI = () => {
       wakeLock = null;
       btnToggleWakeLock.innerText = '画面スリープ (OFF)';
-      btnToggleWakeLock.style.background = '#6c757d'; // OFF時はグレー
+      btnToggleWakeLock.style.background = '#343a40'; // OFF時はグレー
     };
 
     btnToggleWakeLock.addEventListener('click', () => {
@@ -213,6 +242,13 @@
     let isGpsMode = false;
     let deviceHeading = 0;
     let referenceBearing = 0;
+
+    let rawDeviceHeading = 0; 
+    let compassOffset = 0;
+    let currentVisualRotation = 0;
+
+    let currentTileLayer = null;
+    let currentMapTile = 'osm';
     
     const slider = document.getElementById('distance-slider');
     const sliderContainer = document.getElementById('slider-container');
@@ -299,6 +335,11 @@
       "北海道マラソン","東京マラソン"
     ];
 
+    const tileLayers = {
+      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }),
+      gsi_photo: L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', { attribution: '国土地理院' })
+    };
+
     mapFiles.forEach(filename => {
       const btn = document.createElement('button');
       btn.className = 'modal-btn';
@@ -332,9 +373,9 @@
     
     function initMap() {
       map = L.map('map', { zoomControl: false }).setView([43.060, 141.353], 12);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
+      
+      currentTileLayer = tileLayers['osm'];
+      currentTileLayer.addTo(map);
       
       L.control.zoom({ position: 'topright' }).addTo(map);
       
@@ -635,7 +676,7 @@
       }
       
       if (alpha !== null && isGpsMode) {
-        deviceHeading = alpha;
+        rawDeviceHeading = alpha; // 生の数値を保持しておく
         updateReceiverIcon();
       }
     }
@@ -644,13 +685,184 @@
       if (!receiverMarker) return;
       const el = receiverMarker.getElement();
       if (el) {
-        const container = el.querySelector('.receiver-arrow-container');
+        const container = el.querySelector('.receiver-arrow-container'); //[cite: 6]
         if (container) {
-          container.style.transform = `rotate(${deviceHeading}deg)`;
-          container.style.display = isGpsMode ? 'block' : 'none';
+          // 目標となる角度を 0〜359 の範囲で算出
+          let targetHeading = (rawDeviceHeading + compassOffset) % 360;
+          if (targetHeading < 0) targetHeading += 360;
+
+          // 現在表示している角度と目標角度の差分を計算
+          let diff = targetHeading - (currentVisualRotation % 360);
+          
+          // 差分が -180 〜 +180 の最短距離になるように補正
+          if (diff < -180) diff += 360;
+          if (diff > 180) diff -= 360;
+
+          // 実際の表示用角度に最短距離の差分を加算
+          currentVisualRotation += diff;
+          
+          // 他の計算で deviceHeading を使っている場合のための保持
+          deviceHeading = targetHeading; 
+
+          container.style.transform = `rotate(${currentVisualRotation}deg)`; //[cite: 6]
+          container.style.display = isGpsMode ? 'block' : 'none'; //[cite: 6]
         }
       }
     }
+
+    // --- 設定メニューの操作イベント ---
+    // 地図切り替え
+    const btnToggleMapTile = document.getElementById('btn-toggle-maptile');
+    btnToggleMapTile.addEventListener('click', () => {
+      if (currentTileLayer) map.removeLayer(currentTileLayer);
+      
+      if (currentMapTile === 'osm') {
+        currentMapTile = 'gsi_photo';
+        btnToggleMapTile.innerText = '地図背景 (航空写真)';
+      } else {
+        currentMapTile = 'osm';
+        btnToggleMapTile.innerText = '地図背景 (標準)';
+      }
+      
+      currentTileLayer = tileLayers[currentMapTile];
+      currentTileLayer.addTo(map);
+    });
+
+    // コンパス補正用モーダルを開く
+    document.getElementById('btn-open-compass-modal').addEventListener('click', () => {
+      document.getElementById('settings-modal-overlay').style.display = 'none'; // 設定を閉じる
+      document.getElementById('compass-modal-overlay').style.display = 'flex'; // コンパスモーダルを開く
+
+      document.getElementById('slider-compass-offset').value = savedCompassOffset;
+      document.getElementById('compass-offset-val').innerText = savedCompassOffset > 0 ? `+${savedCompassOffset}` : savedCompassOffset;
+      compassOffset = savedCompassOffset; // スライダー操作用
+
+      // 現在地をマップの中央に持ってくる
+      if (receiverMarker) {
+        map.panTo(receiverMarker.getLatLng());
+        const currentDir = isGpsMode ? Math.round(deviceHeading) : '--';
+        showToast(`現在地を中心にしました (現在の向き: ${currentDir}度)`);
+      } else {
+        showToast('受信地点が設定されていません');
+      }
+    });
+
+    // コンパス補正スライダー（リアルタイム反映）
+    const offsetSlider = document.getElementById('slider-compass-offset');
+    const offsetVal = document.getElementById('compass-offset-val');
+    offsetSlider.addEventListener('input', (e) => {
+      compassOffset = parseInt(e.target.value, 10);
+      offsetVal.innerText = compassOffset > 0 ? `+${compassOffset}` : compassOffset;
+      if (isGpsMode && receiverMarker) updateReceiverIcon();
+    });
+
+    // コンパス補正 決定ボタン
+    document.getElementById('btn-compass-ok').addEventListener('click', () => {
+      savedCompassOffset = compassOffset; // 値を確定させる
+      document.getElementById('compass-modal-overlay').style.display = 'none';
+      showToast('コンパス補正を保存しました');
+    });
+
+    // コンパス補正 キャンセルボタン
+    document.getElementById('btn-compass-cancel').addEventListener('click', () => {
+      compassOffset = savedCompassOffset; // 確定済みの値に戻す
+      if (isGpsMode && receiverMarker) updateReceiverIcon();
+      document.getElementById('compass-modal-overlay').style.display = 'none';
+    });
+
+    // --- オフライン用データの保存（手動キャッシュ） ---
+    document.getElementById('btn-save-cache').addEventListener('click', async () => {
+      const res = confirm("地図やコースデータの保存には大きな通信量(約5〜15MB)が発生します。\nWi-Fi環境での実行を強く推奨します。\n\nオフライン用データの保存（または最新版への更新）を開始しますか？");
+      if (!res) return;
+
+      showToast('データのダウンロードを開始しています...');
+      
+      try {
+        const cacheName = 'marathon-offline-data';
+        // 既存のキャッシュを削除して完全更新
+        await caches.delete(cacheName);
+        const cache = await caches.open(cacheName);
+
+        // 1. 静的ファイルとKMLのキャッシュ
+        const kmlUrls = mapFiles.map(name => `./kml/${encodeURIComponent(name)}.kml`);
+        const assets = [
+          './',
+          './marathon-rx.html',
+          './style_marathon-rx.css',
+          './icon_marathon-rx.png',
+          './icon_marathon-rx_192.png',
+          './manifest_marathon-rx.json',
+          ...kmlUrls
+        ];
+        
+        // no-corsやreloadを指定して確実に最新を取得
+        for (const url of assets) {
+          try {
+            const req = new Request(url, { cache: 'reload' });
+            const res = await fetch(req);
+            if (res.ok) await cache.put(req, res);
+          } catch (e) {
+            console.warn('Asset fetch failed:', url);
+          }
+        }
+
+        // 2. 現在選択されているコース範囲の地図タイルを計算して取得 (ズーム12〜15)
+        if (currentTileLayer && (courseLayer || map)) {
+          const bounds = courseLayer ? courseLayer.getBounds() : map.getBounds();
+          const minLat = bounds.getSouth();
+          const maxLat = bounds.getNorth();
+          const minLng = bounds.getWest();
+          const maxLng = bounds.getEast();
+          
+          const tileUrls = [];
+          const urlTemplate = currentTileLayer._url;
+          const subdomains = currentTileLayer.options.subdomains || 'abc';
+          
+          // 緯度経度からタイル座標を計算する関数
+          const lon2tile = (lon, zoom) => Math.floor((lon + 180) / 360 * Math.pow(2, zoom));
+          const lat2tile = (lat, zoom) => Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+
+          for (let z = 12; z <= 15; z++) {
+            const xMin = lon2tile(minLng, z);
+            const xMax = lon2tile(maxLng, z);
+            const yMin = lat2tile(maxLat, z);
+            const yMax = lat2tile(minLat, z);
+            
+            for (let x = xMin; x <= xMax; x++) {
+              for (let y = yMin; y <= yMax; y++) {
+                const s = subdomains[(x + y) % subdomains.length];
+                const tileUrl = urlTemplate
+                  .replace('{s}', s)
+                  .replace('{z}', z)
+                  .replace('{x}', x)
+                  .replace('{y}', y)
+                  .replace('{r}', ''); // Retina非対応タイルのためのフォールバック
+                tileUrls.push(tileUrl);
+              }
+            }
+          }
+
+          // 並列リクエスト（50件ずつ）でブラウザの負荷を抑えながらタイルをキャッシュ
+          const fetchTile = async (url) => {
+            try {
+              // 外部タイルのCORSブロックを防ぐため no-cors モードで取得（Opaqueレスポンスとして保存）
+              const req = new Request(url, { mode: 'no-cors', cache: 'reload' });
+              const response = await fetch(req);
+              await cache.put(req, response);
+            } catch (e) {}
+          };
+
+          for (let i = 0; i < tileUrls.length; i += 50) {
+            const chunk = tileUrls.slice(i, i + 50);
+            await Promise.all(chunk.map(fetchTile));
+          }
+        }
+        showToast('オフライン用データの保存が完了しました！');
+      } catch (error) {
+        console.error('Offline caching error:', error);
+        showToast('保存中にエラーが発生しました。');
+      }
+    });
 
     function setReceiverPosition(lat, lng) {
       const latlng = [lat, lng];

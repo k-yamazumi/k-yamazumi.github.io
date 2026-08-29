@@ -1,9 +1,10 @@
-const CACHE_NAME = 'marathon-rx-v20260830-1';
+const CACHE_NAME = 'marathon-rx-v20260830-2';
 const urlsToCache = [
   './marathon-rx.html',
   './manifest_marathon-rx.json',
   './icon_marathon-rx.png',
-  './icon_marathon-rx_192.png'
+  './icon_marathon-rx_192.png',
+  './style_marathon-rx.css'
 ];
 
 // インストール時: 指定したファイルをキャッシュし、即座に新しいサービスワーカーを待機状態から抜ける
