@@ -13,13 +13,13 @@
 </head>
 
 <body>
-  <div id="map" style="position: relative; z-index: 1;"></div>
+  <div id="map" style="position: relative;"></div>
   
   <div id="ui-panel">
     <div style="display: flex; justify-content: space-between; align-items: stretch; margin-bottom: 5px; gap: 4px;">
       <button class="btn" id="btn-change-receiver" style="flex:1; padding: 6px 2px; font-size:11px;">受信地点変更</button>
       <button class="btn" id="btn-center-receiver" style="flex:1; padding: 4px 2px; font-size:11px; background:#6c757d; line-height: 1.2;">受信点を<br>中央へ</button>
-      <button class="btn" id="btn-change-map" style="background:#17a2b8; margin:0; flex:1; padding: 6px 2px; font-size:11px; display:flex; align-items:center; justify-content:center; line-height: 1.2;">マップ<br>変更</button>
+      <button class="btn" id="btn-toggle-wakelock" style="background:#343a40; margin:0; flex:1; padding: 6px 2px; font-size:11px; display:flex; align-items:center; justify-content:center; line-height: 1.2;">スリープ<br>無効(OFF)</button>
       <input type="file" id="file-input" accept=".kml" style="display:none;" />
     </div>
 
@@ -71,7 +71,7 @@
   </div>
 
   <div id="modal-overlay" class="modal-overlay">
-    <div id="modal-content">
+    <div class="modal-content">
       <h3 style="margin-top:0;">受信地点の変更</h3>
       <button class="modal-btn" id="btn-gps">現在地を設定する (GPS)</button>
       <button class="modal-btn" id="btn-map-select">地図上で指定する</button>
@@ -82,7 +82,7 @@
 
   <!-- 受信地点リスト用モーダル -->
   <div id="list-modal-overlay" class="modal-overlay">
-    <div id="modal-content" style="max-height: 80vh; overflow-y: auto;">
+    <div class="modal-content" style="max-height: 80vh; overflow-y: auto;">
       <h3 style="margin-top:0;">受信地点リスト</h3>
       <div id="rx-list-container"></div>
       <button class="modal-btn modal-cancel" id="btn-list-cancel">キャンセル</button>
@@ -94,8 +94,8 @@
     <div id="settings-modal-content" class="modal-content">
       <h3 style="margin-top:0;">設定</h3>
 
-      <!-- 画面スリープ無効化 -->
-      <button class="modal-btn" id="btn-toggle-wakelock" style="background: #343a40;">画面スリープ無効化 (OFF)</button>
+      <!-- マップ変更 -->
+      <button class="modal-btn" id="btn-change-map" style="background: #17a2b8;">マップ変更</button>
 
       <!-- 地図背景の切り替え -->
       <button class="modal-btn" id="btn-toggle-maptile" style="background: #17a2b8;">地図背景 (標準)</button>
@@ -157,7 +157,7 @@
           wakeLock = await navigator.wakeLock.request('screen');
           isManualRelease = false;
           
-          btnToggleWakeLock.innerText = '画面スリープ無効化 (ON)';
+          btnToggleWakeLock.innerHTML = 'スリープ<br>無効(ON)';
           btnToggleWakeLock.style.background = '#dc3545'; // ON時は赤色で強調
           
           // OS側で強制解放された場合のUIリセット処理
@@ -182,7 +182,7 @@
 
     const resetWakeLockUI = () => {
       wakeLock = null;
-      btnToggleWakeLock.innerText = '画面スリープ無効化 (OFF)';
+      btnToggleWakeLock.innerHTML = 'スリープ<br>無効(OFF)';
       btnToggleWakeLock.style.background = '#343a40'; // OFF時はグレー
     };
 
