@@ -144,61 +144,56 @@ input, select, textarea {
 /* =========================================
    3. Modals
 ========================================= */
-/* 共通のモーダル背景 */
+
 .modal-overlay {
-  display: none;
   position: fixed;
-  top: 0;
-  left: 0;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 16px;
+  box-sizing: border-box;
   width: 100vw;
-  height: 100vh;
   height: 100dvh;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 2000;
-  justify-content: center;
-  align-items: center;
 }
 
-/* 共通のモーダルコンテンツ */
-.modal-content {
-  background: white;
+.modal-overlay > .modal-content {
+  width: min(420px, calc(100vw - 32px));
+  max-width: 100%;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  margin: 0;
   padding: 20px;
+  background: #fff;
   border-radius: 10px;
   text-align: center;
-  width: 80%;
-  max-width: 300px;
 }
 
-/* コンパスモーダル専用の例外スタイル */
+/* リスト表示用モーダル */
+#map-list-modal-overlay > .modal-content,
+#list-modal-overlay > .modal-content {
+  max-height: 80dvh;
+}
+
+/* コンパス補正モーダル */
 #compass-modal-overlay {
   align-items: flex-start;
   padding-top: 60px;
   background: transparent;
   pointer-events: none;
 }
+
 #compass-modal-content {
   pointer-events: auto;
-  background: rgba(255, 255, 255, 0.95);
+  width: min(220px, 80vw);
+  max-height: none;
   padding: 12px 15px;
+  background: rgba(255, 255, 255, 0.95);
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-  width: 220px;
-  position: relative;
-}
-
-#modal-overlay,
-#map-modal-overlay,
-#map-list-modal-overlay,
-#list-modal-overlay,
-#settings-modal-overlay,
-
-#modal-content {
-  background: white;
-  padding: 20px;
-  border-radius: 10px;
-  text-align: center;
-  width: 80%;
-  max-width: 300px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }
 
 .modal-btn {
@@ -214,10 +209,18 @@ input, select, textarea {
   cursor: pointer;
   font-weight: bold;
 }
-.modal-btn:hover { background: #218838; }
 
-.modal-cancel { background: #6c757d; }
-.modal-cancel:hover { background: #5a6268; }
+.modal-btn:hover {
+  background: #218838;
+}
+
+.modal-cancel {
+  background: #6c757d;
+}
+
+.modal-cancel:hover {
+  background: #5a6268;
+}
 
 /* =========================================
    4. Map Markers
