@@ -105,6 +105,9 @@
 
       <!-- オフライン用データ保存 -->
       <button class="modal-btn" id="btn-save-cache" style="background: #17a2b8;">オフライン用データを保存</button>
+
+      <!-- わたMap連携 -->
+      <button class="modal-btn" id="btn-watamap-link" style="background: #17a2b8;">わたMap連携(OFF)</button>
       
       <button class="modal-btn modal-cancel" id="btn-settings-cancel">閉じる</button>
     </div>
@@ -247,6 +250,7 @@
     let courseLength = 0; 
     let isMapSelectMode = false;
     let isGpsMode = false;
+    let isWatamapLinked = false;
     let deviceHeading = 0;
     let referenceBearing = 0;
 
@@ -440,6 +444,8 @@
       userSelect.innerHTML = '<option value="manual">手動設定</option>';
       
       for (const [id, data] of Object.entries(window.activeUsers)) {
+        if (!isWatamapLinked && data.source === 'watamap') continue;
+
         const option = document.createElement('option');
         option.value = id;
         option.text = data.name || "名称未設定";
@@ -735,6 +741,32 @@
       
       currentTileLayer = tileLayers[currentMapTile];
       currentTileLayer.addTo(map);
+    });
+
+    // わたMap連携ボタンの切り替え
+    document.getElementById('btn-watamap-link').addEventListener('click', () => {
+      isWatamapLinked = !isWatamapLinked;
+      const btn = document.getElementById('btn-watamap-link');
+      
+      if (isWatamapLinked) {
+        btn.textContent = 'わたMap連携(ON)';
+        btn.style.background = '#ffc107'; // 黄色
+        btn.style.color = '#333';
+        showToast('わたMap連携をONにしました');
+      } else {
+        btn.textContent = 'わたMap連携(OFF)';
+        btn.style.background = '#17a2b8'; // 元の色
+        btn.style.color = 'white';
+        showToast('わたMap連携をOFFにしました');
+      }
+      
+      const prevSelected = userSelect.value;
+      updateDropdown(); // フラグが変わったのでリストを再生成
+      
+      // 選択していたデータがリストから消えた場合は選択変更イベントを発火させる
+      if (userSelect.value !== prevSelected) {
+        userSelect.dispatchEvent(new Event('change'));
+      }
     });
 
     // コンパス補正用モーダルを開く
