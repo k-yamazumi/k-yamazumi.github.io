@@ -1080,10 +1080,24 @@
       
       bearingVal.innerText = relBearing.toFixed(1);
 
-      // 受信点からランナー方向へ延長（表示範囲に応じて地図側でクリップ）
-      const destPoint = turf.destination(recPoint, 100, bearing, {units: 'kilometers'});
-      const destLatlng = [destPoint.geometry.coordinates[1], destPoint.geometry.coordinates[0]];
+      // 受信点とランナーを結ぶ線分
+      const zoom = 15;
+      const p1 = map.project(recLatlng, zoom);
+      const p2 = map.project(rLatlng, zoom);
       
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      
+      let destLatlng;
+      if (dx === 0 && dy === 0) {
+        destLatlng = rLatlng;
+      } else {
+        // 十分に大きな値を掛けて画面外まで延長
+        const ext = 500000 / Math.sqrt(dx * dx + dy * dy);
+        const p3 = L.point(p2.x + dx * ext, p2.y + dy * ext);
+        destLatlng = map.unproject(p3, zoom);
+      }
+
       if (!guideLine) {
         guideLine = L.polyline([recLatlng, destLatlng], {color: '#d9534f', weight: 4}).addTo(map);
       } else {
