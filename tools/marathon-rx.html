@@ -24,7 +24,7 @@
     </div>
 
     <div class="checkbox-group">
-      <label><input type="checkbox" id="chk-distance" checked> 距離表示(5km毎)</label>
+      <label><input type="checkbox" id="chk-distance" checked> 距離表示</label>
       <label><input type="checkbox" id="chk-landmark" checked> ランドマーク</label>
     </div>
     
@@ -205,7 +205,7 @@
   <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
-    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js";
 
     // Firebase設定
     const firebaseConfig = {
@@ -227,6 +227,11 @@
     window.lastSelectedUserData = null;
     window.locationsRef = locationsRef;
     window.onFirebaseValue = onValue;
+
+    // system/lastActive を30秒ごとに更新
+    setInterval(() => {
+      set(ref(db, 'system/lastActive'), Date.now());
+    }, 30000);
   </script>
 
   <script>
@@ -1043,7 +1048,7 @@
       
       bearingVal.innerText = relBearing.toFixed(1);
 
-      // 受信点からランナー方向へ100km延長（表示範囲に応じて地図側でクリップ）
+      // 受信点からランナー方向へ延長（表示範囲に応じて地図側でクリップ）
       const destPoint = turf.destination(recPoint, 100, bearing, {units: 'kilometers'});
       const destLatlng = [destPoint.geometry.coordinates[1], destPoint.geometry.coordinates[0]];
       
@@ -1072,6 +1077,20 @@
           });
       });
     }
+  </script>
+
+  <!-- わたMap連携(サーバー起動) -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // 作成したCloud FunctionsのURL
+      const FUNCTION_URL = 'https://start-wata-sync-184738315315.us-central1.run.app';
+      
+      // バックグラウンドでAPIを呼び出す
+      fetch(FUNCTION_URL, { method: 'POST' })
+        .then(response => response.text())
+        .then(text => console.log('VM起動ステータス:', text))
+        .catch(err => console.error('VM起動リクエストに失敗:', err));
+    });
   </script>
 
 </body>
