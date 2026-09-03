@@ -310,29 +310,48 @@
 
     // 受信地点リスト
     const rxPoints = [
-      { name: "大倉山", lat: 43.05075911107704, lng: 141.28586253280545 },
-      { name: "藻岩山", lat: 43.02228556677433, lng: 141.32252866343683 },
-      { name: "JRタワー", lat: 43.06836490962493, lng: 141.35239966517887 },
-      { name: "UHB本社", lat: 43.06012850004131, lng: 141.33561954158733 }
+      // 北海道マラソン
+      { name: "大倉山", lat: 43.05075911107704, lng: 141.28586253280545, courses: ["北海道マラソン"], isDefault: true },
+      { name: "藻岩山", lat: 43.02228556677433, lng: 141.32252866343683, courses: ["北海道マラソン"], isDefault: true },
+      { name: "JRタワー", lat: 43.06836490962493, lng: 141.35239966517887, courses: ["北海道マラソン"], isDefault: true },
+      { name: "UHB本社", lat: 43.06012850004131, lng: 141.33561954158733, courses: ["北海道マラソン"] },
+      // 名古屋ウィメンズマラソン
+      { name: "ヒルトン名古屋", lat: 35.16768707514881, lng: 136.8944940868226, courses: ["名古屋ウィメンズマラソン"] },
+      { name: "THK本社", lat: 35.171330024468, lng: 136.91395026712823, courses: ["名古屋ウィメンズマラソン"] },
     ];
 
     const listModalOverlay = document.getElementById('list-modal-overlay');
     const rxListContainer = document.getElementById('rx-list-container');
 
-    // リストモーダル内のボタンを動的生成
-    rxPoints.forEach(point => {
-      const btn = document.createElement('button');
-      btn.className = 'modal-btn';
-      btn.style.background = '#007bff';
-      btn.innerText = point.name;
-      btn.onclick = () => {
-        listModalOverlay.style.display = 'none';
-        setReceiverPosition(point.lat, point.lng);
-        map.panTo([point.lat, point.lng]);
-        showToast(`${point.name}を受信地点に設定しました`);
-      };
-      rxListContainer.appendChild(btn);
-    });
+    // リストモーダル内のボタンを動的生成する関数
+    function updateRxPointsList(courseName) {
+      rxListContainer.innerHTML = ''; // 一旦クリア
+      
+      // コース名に一致するものを探す
+      let filteredPoints = rxPoints.filter(p => p.courses && p.courses.includes(courseName));
+      
+      // KMLにnameがない、または一致するものが1つもない場合はisDefaultがtrueのものを表示
+      if (!courseName || filteredPoints.length === 0) {
+        filteredPoints = rxPoints.filter(p => p.isDefault === true);
+      }
+      
+      filteredPoints.forEach(point => {
+        const btn = document.createElement('button');
+        btn.className = 'modal-btn';
+        btn.style.background = '#007bff';
+        btn.innerText = point.name;
+        btn.onclick = () => {
+          listModalOverlay.style.display = 'none';
+          setReceiverPosition(point.lat, point.lng);
+          map.panTo([point.lat, point.lng]);
+          showToast(`${point.name}を受信地点に設定しました`);
+        };
+        rxListContainer.appendChild(btn);
+      });
+    }
+
+    // 初期状態（未読み込み時）はデフォルトを表示
+    updateRxPointsList(null);
     
     // --- マップ変更用ロジック ---
     const mapModalOverlay = document.getElementById('map-modal-overlay');
@@ -661,6 +680,12 @@
     function parseKml(kmlString) {
       const parser = new DOMParser();
       const kmlDoc = parser.parseFromString(kmlString, 'text/xml');
+
+      // KMLから大会名を抽出して受信地点リストを更新
+      const docNameNodes = kmlDoc.getElementsByTagName('name');
+      const courseName = docNameNodes.length > 0 ? docNameNodes[0].textContent.trim() : null;
+      updateRxPointsList(courseName);
+
       const geojson = toGeoJSON.kml(kmlDoc);
       
       if (courseGroup) map.removeLayer(courseGroup);
