@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>見通し判定プロファイル</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <style>
+        body { margin: 0; padding: 10px; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; background: #f8f9fa; }
+        #map { height: 45%; width: 100%; border: 1px solid #ccc; border-radius: 4px; z-index: 1; cursor: crosshair; }
+        #controls { margin: 10px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        #chart-container { flex: 1; width: 100%; position: relative; border: 1px solid #ccc; background: #fff; border-radius: 4px; padding: 10px; box-sizing: border-box; }
+        .btn { padding: 6px 14px; font-weight: bold; border: none; border-radius: 4px; cursor: pointer; transition: 0.2s; }
+        .btn:hover { opacity: 0.8; }
+        #btn-calc { background: #007bff; color: white; }
+        #btn-reverse { background: #17a2b8; color: white; }
+        #btn-save { background: #28a745; color: white; }
+        .btn:disabled { background: #6c757d !important; cursor: not-allowed; opacity: 0.5; }
+        .offset-label { font-size: 14px; font-weight: bold; background: #e9ecef; padding: 4px 8px; border-radius: 4px; }
+        .offset-input { width: 50px; text-align: right; margin-right: 2px; }
+        #status-msg { font-size: 14px; color: #d9534f; font-weight: bold; margin-left: 5px; }
+    </style>
+    <!-- 必要なライブラリの読み込み -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+</head>
+<body>
+    <div id="controls">
+        <button id="btn-calc" class="btn" disabled>計算する</button>
+        <button id="btn-reverse" class="btn" disabled>左右反転</button>
+        <label class="offset-label">始点オフセット: <input type="number" id="offset-start" class="offset-input" value="1" min="0">m</label>
+        <label class="offset-label">終点オフセット: <input type="number" id="offset-end" class="offset-input" value="1" min="0">m</label>
+        <button id="btn-save" class="btn" disabled>画像を保存</button>
+        <span id="status-msg">地図上をクリックして2点配置してください。</span>
+    </div>
+    
+    <div id="map"></div>
+    
+    <div id="chart-container">
+        <canvas id="profileChart"></canvas>
+    </div>
+
+    <!-- Pbf, VectorTile等のモジュール読み込みとメインロジック -->
+    <script type="module">
+        import Pbf from 'https://esm.sh/pbf@3.2.1';
+        import { VectorTile } from 'https://esm.sh/@mapbox/vector-tile@1.3.1';
+
+        // グラフの背景を白にするプラグイン
+        const whiteBackgroundPlugin = {
+            id: 'customCanvasBackgroundColor',
+            beforeDraw: (chart, args, options) => {
+                const {ctx} = chart;
+                ctx.save();
+                ctx.globalCompositeOperation = 'destination-over';
+                ctx.fillStyle = options.color || '#ffffff';
+                ctx.fillRect(0, 0, chart.width, chart.height);
+                ctx.restore();
+            }
+        };
+
+        let map, chart;
+        let markers = [];
+        let activeMarker = null;
+        let calcLine = null;
+        let hoverMarker = null; 
+
+        let currentPointsData = []; 
+        let isReversed = false;
+
+        const btnCalc = document.getElementById('btn-calc');
+        const btnReverse = document.getElementById('btn-reverse');
+        const btnSave = document.getElementById('btn-save');
+        const offsetStartInput = document.getElementById('offset-start');
+        const offsetEndInput = document.getElementById('offset-end');
+        const statusMsg = document.getElementById('status-msg');
+
+        // 地図初期化（札幌駅周辺）
+        map = L.map('map').setView([43.068, 141.350], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap'
+        }).addTo(map);
+
+        // マーカー追加処理
+        map.on('click', (e) => {
+            if (markers.length >= 2) return;
+            const marker = L.marker(e.latlng, { draggable: true }).addTo(map);
+            markers.push(marker);
+            
+            const label = markers.length === 1 ? '始点' : '終点';
+            marker.bindPopup(`${label}<br><small>Deleteキーで削除</small>`).openPopup();
+            activeMarker = marker;
+
+            marker.on('click', () => { activeMarker = marker; marker.openPopup(); });
+            marker.on('dragend', updateUI);
+            updateUI();
+        });
+
+        // マーカー削除処理
+        document.addEventListener('keydown', (e) => {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && activeMarker) {
+                map.removeLayer(activeMarker);
+                markers = markers.filter(m => m !== activeMarker);
+                activeMarker = null;
+                if (calcLine) map.removeLayer(calcLine);
+                updateUI();
+            }
+        });
+
+        function updateUI() {
+            if (markers.length === 2) {
+                btnCalc.disabled = false;
+                statusMsg.style.color = '#333';
+                statusMsg.innerText = "2点が設定されました。「計算する」を押してください。";
+            } else {
+                btnCalc.disabled = true;
+                btnReverse.disabled = true;
+                btnSave.disabled = true;
+                currentPointsData = [];
+                isReversed = false;
+                btnReverse.innerText = "左右反転";
+                hideHoverMarker();
+                statusMsg.style.color = '#333';
+                statusMsg.innerText = `地図上をクリックして2点配置してください。（現在: ${markers.length}点）`;
+                if (chart) chart.destroy();
+            }
+        }
+
+        // --- 地形・建物データ解析ロジック ---
+        const tileCache = new Map();
+
+        function latLngToTile(lat, lng, zoom = 15) {
+            const x = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
+            const y = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+            return { z: zoom, x, y };
+        }
+
+        async function fetchVectorTile(z, x, y) {
+            const key = `${z}-${x}-${y}`;
+            if (tileCache.has(key)) return tileCache.get(key);
+
+            const url = `https://indigo-inc.github.io/plateau-lod1-mvt/${z}/${x}/${y}.pbf`;
+            const promise = fetch(url)
+                .then(res => res.ok ? res.arrayBuffer() : null)
+                .then(buffer => buffer ? new VectorTile(new Pbf(buffer)) : null)
+                .catch(e => null);
+            
+            tileCache.set(key, promise);
+            return promise;
+        }
+
+        async function getBuildingHeight(lat, lng) {
+            const tile = latLngToTile(lat, lng, 15);
+            const vt = await fetchVectorTile(tile.z, tile.x, tile.y);
+            if (!vt) return 0;
+
+            const bldgLayer = vt.layers.bldg || vt.layers.building;
+            if (!bldgLayer) return 0;
+
+            const pt = turf.point([lng, lat]);
+            for (let i = 0; i < bldgLayer.length; i++) {
+                const feature = bldgLayer.feature(i);
+                try {
+                    const geojson = feature.toGeoJSON(tile.x, tile.y, tile.z);
+                    if (turf.booleanPointInPolygon(pt, geojson)) {
+                        const props = feature.properties;
+                        return props.measuredHeight || props.z || (props.storeysAboveGround ? props.storeysAboveGround * 3 : 10) || 0;
+                    }
+                } catch(e) {}
+            }
+            return 0;
+        }
+
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        // 配列を指定サイズで分割する関数（API負荷軽減用）
+        const chunkArray = (arr, size) => arr.reduce((acc, _, i) => (i % size ? acc : [...acc, arr.slice(i, i + size)]), []);
+
+        btnCalc.addEventListener('click', async () => {
+            if (markers.length !== 2) return;
+            btnCalc.disabled = true;
+            btnReverse.disabled = true;
+            btnSave.disabled = true;
+            statusMsg.style.color = '#007bff';
+            statusMsg.innerText = "データ取得・解析中...（API負荷を抑えているため少し時間がかかります）";
+            hideHoverMarker();
+
+            let latlng1 = markers[0].getLatLng();
+            let latlng2 = markers[1].getLatLng();
+
+            // 西側を必ず左（始点）にする
+            if (latlng1.lng > latlng2.lng) {
+                const temp = latlng1;
+                latlng1 = latlng2;
+                latlng2 = temp;
+            }
+
+            const totalDist = getDistance(latlng1.lat, latlng1.lng, latlng2.lat, latlng2.lng);
+            
+            if (calcLine) map.removeLayer(calcLine);
+            calcLine = L.polyline([latlng1, latlng2], {color: 'red', dashArray: '5, 5'}).addTo(map);
+
+            // 建物をすり抜けないよう分割数を200にアップ
+            const steps = 200;
+            const points = [];
+            for (let i = 0; i <= steps; i++) {
+                points.push({
+                    lat: latlng1.lat + (latlng2.lat - latlng1.lat) * (i / steps),
+                    lng: latlng1.lng + (latlng2.lng - latlng1.lng) * (i / steps),
+                    dist_from_start: (totalDist * (i / steps))
+                });
+            }
+
+            try {
+                // 1. 国土地理院APIから標高を取得（サーバー負荷を抑えるため20件ずつリクエスト）
+                const pointChunks = chunkArray(points, 20);
+                const elevations = [];
+                for (const chunk of pointChunks) {
+                    const res = await Promise.all(chunk.map(async pt => {
+                        try {
+                            const resp = await fetch(`https://cyberjapandata2.gsi.go.jp/general/dem/scripts/getelevation.php?lon=${pt.lng}&lat=${pt.lat}&outtype=JSON`);
+                            const json = await resp.json();
+                            return json.elevation !== undefined && json.elevation !== 'e' ? parseFloat(json.elevation) : 0;
+                        } catch(e) { return 0; }
+                    }));
+                    elevations.push(...res);
+                    await new Promise(r => setTimeout(r, 100)); // 0.1秒待機
+                }
+
+                // 2. ベクトルタイルから建物の高さを一括取得
+                const bldgHeights = await Promise.all(points.map(pt => getBuildingHeight(pt.lat, pt.lng)));
+
+                currentPointsData = points.map((pt, i) => ({
+                    lat: pt.lat,
+                    lng: pt.lng,
+                    dist_from_start: pt.dist_from_start,
+                    elevation: elevations[i],
+                    bldg: bldgHeights[i],
+                    total: elevations[i] + bldgHeights[i]
+                }));
+
+                isReversed = false;
+                btnReverse.innerText = "左右反転";
+                renderChart();
+
+                // 建物が1件も取得できなかった場合の警告
+                const hasBuilding = currentPointsData.some(p => p.bldg > 0);
+                if (!hasBuilding) {
+                    statusMsg.style.color = '#d9534f';
+                    statusMsg.innerText = "※注意: このエリアの建物データが存在しないか、建物をすり抜けました。";
+                } else {
+                    statusMsg.style.color = '#28a745';
+                    statusMsg.innerText = "計算完了。グラフにマウスを当てると地図と連動します。";
+                }
+
+                btnCalc.disabled = false;
+                btnReverse.disabled = false;
+                btnSave.disabled = false;
+            } catch (err) {
+                console.error(err);
+                statusMsg.style.color = '#d9534f';
+                statusMsg.innerText = "データの取得に失敗しました。";
+                btnCalc.disabled = false;
+            }
+        });
+
+        // オフセット値が変更されたらグラフだけ再描画
+        offsetStartInput.addEventListener('input', () => { if(currentPointsData.length > 0) renderChart(); });
+        offsetEndInput.addEventListener('input', () => { if(currentPointsData.length > 0) renderChart(); });
+
+        btnReverse.addEventListener('click', () => {
+            isReversed = !isReversed;
+            btnReverse.innerText = isReversed ? "左右反転を戻す" : "左右反転";
+            hideHoverMarker();
+            renderChart();
+        });
+
+        // グラフ描画
+        function renderChart() {
+            if (chart) chart.destroy();
+            if (currentPointsData.length === 0) return;
+
+            const ctx = document.getElementById('profileChart').getContext('2d');
+            
+            const chartPoints = isReversed ? [...currentPointsData].reverse() : currentPointsData;
+            const totalDist = currentPointsData[currentPointsData.length - 1].dist_from_start;
+            
+            const labels = [];
+            const dataElevation = [];
+            const dataTotal = [];
+            const losData = [];
+
+            // 左右反転を考慮してオフセット値を割り当て
+            const startOffset = parseFloat(isReversed ? offsetEndInput.value : offsetStartInput.value) || 0;
+            const endOffset = parseFloat(isReversed ? offsetStartInput.value : offsetEndInput.value) || 0;
+
+            chartPoints.forEach((pt, idx) => {
+                const d = isReversed ? (totalDist - pt.dist_from_start) : pt.dist_from_start;
+                labels.push(d.toFixed(2));
+                
+                // 地形と建物込みのデータを分離
+                dataElevation.push(pt.elevation);
+                dataTotal.push(pt.total);
+                
+                // 見通し線 (地盤＋建物高＋指定オフセット)
+                if (idx === 0) {
+                    losData.push(pt.total + startOffset);
+                } else if (idx === chartPoints.length - 1) {
+                    losData.push(pt.total + endOffset);
+                } else {
+                    losData.push(null);
+                }
+            });
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                plugins: [whiteBackgroundPlugin],
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '見通し線',
+                            data: losData,
+                            borderColor: '#d9534f',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 4,
+                            spanGaps: true,
+                            order: 1 // 一番手前に描画
+                        },
+                        {
+                            label: '地形のみ (m)',
+                            data: dataElevation,
+                            borderColor: 'rgba(76, 175, 80, 1)',
+                            backgroundColor: 'rgba(76, 175, 80, 0.8)', // 緑色
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 0,
+                            borderWidth: 1,
+                            order: 2 
+                        },
+                        {
+                            label: '建物あり (m)',
+                            data: dataTotal,
+                            borderColor: 'rgba(66, 133, 244, 1)',
+                            backgroundColor: 'rgba(66, 133, 244, 0.5)', // 青色
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 6,
+                            borderWidth: 1,
+                            order: 3 // 一番奥に描画（地形の上にはみ出た部分だけ青く見える）
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        x: { title: { display: true, text: '進行距離 (km)' } },
+                        y: { title: { display: true, text: '高さ (m)' } }
+                    },
+                    onHover: (event, activeElements) => {
+                        if (activeElements.length > 0) {
+                            const idx = activeElements[0].index;
+                            const pt = chartPoints[idx];
+                            showHoverMarker(pt.lat, pt.lng);
+                        } else {
+                            hideHoverMarker();
+                        }
+                    }
+                }
+            });
+
+            document.getElementById('profileChart').addEventListener('mouseout', hideHoverMarker);
+        }
+
+        function showHoverMarker(lat, lng) {
+            if (!hoverMarker) {
+                hoverMarker = L.circleMarker([lat, lng], {
+                    color: 'white', weight: 2, fillColor: '#007bff', fillOpacity: 1, radius: 6, zIndexOffset: 1000
+                }).addTo(map);
+            } else {
+                hoverMarker.setLatLng([lat, lng]);
+                if (!map.hasLayer(hoverMarker)) hoverMarker.addTo(map);
+            }
+        }
+
+        function hideHoverMarker() {
+            if (hoverMarker && map.hasLayer(hoverMarker)) map.removeLayer(hoverMarker);
+        }
+
+        btnSave.addEventListener('click', () => {
+            if (!chart) return;
+            const link = document.createElement('a');
+            link.download = 'profile_chart.png';
+            link.href = chart.toBase64Image();
+            link.click();
+        });
+    </script>
+</body>
+</html>
