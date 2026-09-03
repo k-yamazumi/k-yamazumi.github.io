@@ -372,11 +372,13 @@
     function sendLocation(pos) {
       if (!pos) return;
       set(dbRef, {
+        userId: deviceId,  // パスのキー($user_id)と一致させる
         name: inputName.value.trim(),
         lat: pos.lat,
         lng: pos.lng,
         heading: pos.heading,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        source: "demo"
       }).catch(err => console.error("Firebase送信エラー:", err));
     }
 
