@@ -26,6 +26,7 @@
     <div class="checkbox-group">
       <label><input type="checkbox" id="chk-distance" checked> 距離表示</label>
       <label><input type="checkbox" id="chk-landmark" checked> ランドマーク</label>
+      <label><input type="checkbox" id="chk-my-direction"> 自分の向き</label>
     </div>
     
     <!-- 共有ユーザー選択プルダウン -->
@@ -258,6 +259,7 @@
 
     let rawDeviceHeading = 0; 
     let compassOffset = 0;
+    let savedCompassOffset = 0;
     let currentVisualRotation = 0;
 
     let currentTileLayer = null;
@@ -271,6 +273,8 @@
     const modalOverlay = document.getElementById('modal-overlay');
     const chkDistance = document.getElementById('chk-distance');
     const chkLandmark = document.getElementById('chk-landmark');
+    const chkMyDirection = document.getElementById('chk-my-direction');
+    let myDirectionLine = null;
 
     const userSelect = document.getElementById('user-select');
     const targetInfo = document.getElementById('target-info');
@@ -627,6 +631,10 @@
       else map.removeLayer(landmarksLayer);
     });
 
+    chkMyDirection.addEventListener('change', () => {
+      updateMyDirectionLine();
+    });
+
     function loadDefaultKml() {
       const defaultKmlString = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -882,6 +890,47 @@
           container.style.transform = `rotate(${currentVisualRotation}deg)`; //[cite: 6]
           container.style.display = isGpsMode ? 'block' : 'none'; //[cite: 6]
         }
+      }
+      updateMyDirectionLine(); // 向きが変わるたびに青線も更新
+    }
+
+    function updateMyDirectionLine() {
+      // チェックが外れている or GPSモード（自分の向き）が有効でない場合は線を消す
+      if (!chkMyDirection.checked || !receiverMarker || !isGpsMode) {
+        if (myDirectionLine) {
+          map.removeLayer(myDirectionLine);
+          myDirectionLine = null;
+        }
+        return;
+      }
+
+      const recLatlng = receiverMarker.getLatLng();
+      const zoom = 15;
+      const p1 = map.project(recLatlng, zoom);
+      
+      // 無限大（画面外まで届く長さ）の計算
+      const ext = 500000;
+      const rad = deviceHeading * Math.PI / 180;
+      // ピクセル座標は上がマイナスなので北を0度としてYに-cos、Xにsinを掛ける
+      const dx = Math.sin(rad) * ext;
+      const dy = -Math.cos(rad) * ext;
+      
+      const p2 = L.point(p1.x + dx, p1.y + dy);
+      const destLatlng = map.unproject(p2, zoom);
+
+      // 青線の描画・更新
+      if (!myDirectionLine) {
+        myDirectionLine = L.polyline([recLatlng, destLatlng], {color: '#4285F4', weight: 4}).addTo(map);
+      } else {
+        myDirectionLine.setLatLngs([recLatlng, destLatlng]);
+        if (!map.hasLayer(myDirectionLine)) {
+          myDirectionLine.addTo(map);
+        }
+      }
+
+      // 赤線が被る場合は赤線を前面に出す
+      if (guideLine && map.hasLayer(guideLine)) {
+        guideLine.bringToFront();
       }
     }
 
@@ -1315,6 +1364,8 @@
       } else {
         guideLine.setLatLngs([recLatlng, destLatlng]);
       }
+
+      guideLine.bringToFront();
     }
 
     window.addEventListener('resize', () => {
