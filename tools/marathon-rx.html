@@ -233,7 +233,8 @@
 
     // system/lastActive を30秒ごとに更新
     setInterval(() => {
-      set(ref(db, 'system/lastActive'), Date.now());
+      set(ref(db, 'system/lastActive'), Date.now())
+        .catch(err => console.log('lastActive更新失敗:', err));
     }, 30000);
   </script>
 
@@ -242,15 +243,16 @@
     let distanceMarkersLayer = L.layerGroup();
     let landmarksLayer = L.layerGroup();
     
-    // ターゲット（Firebase連携）マーカー
-    let targetLiveMarker = null;
+    let targetLiveMarker = null; // ターゲット（Firebase連携）マーカー
     let staleCheckInterval = null;
     
     let courseLineString = null; 
     let courseLength = 0; 
+
     let isMapSelectMode = false;
     let isGpsMode = false;
     let isWatamapLinked = false;
+
     let deviceHeading = 0;
     let referenceBearing = 0;
 
@@ -272,6 +274,8 @@
 
     const userSelect = document.getElementById('user-select');
     const targetInfo = document.getElementById('target-info');
+
+    const FUNCTION_URL = 'https://start-wata-sync-184738315315.us-central1.run.app';
 
     // 指定されたランドマークのデータ
     const landmarksData = [
@@ -296,6 +300,12 @@
       { name: "富岡八幡宮", lat: 35.6718943670339, lng: 139.7995526832209 },
       { name: "高輪公園", lat: 35.63293803209382, lng: 139.73556755876461 },
       { name: "スカイツリー", lat: 35.71007958314513, lng: 139.81070006931947 },
+      // 名古屋
+      { name: "バンテリンドーム", lat: 35.18605852500562, lng: 136.94740778347142 },
+      { name: "名古屋城", lat: 35.18564504847352, lng: 136.89909317621826 },
+      { name: "ヒルトン名古屋", lat: 35.16768707514881, lng: 136.8944940868226 },
+      { name: "THK本社", lat: 35.171330024468, lng: 136.91395026712823 },
+      { name: "パロマ瑞穂スタジアム", lat: 35.122704380812856, lng: 136.94418535225893 },
     ];
 
     // 受信地点リスト
@@ -742,7 +752,7 @@
             }),
             interactive: false
           });
-          distanceMarkersLayer.addLayer(mk);
+          landmarksLayer.addLayer(mk);
         }
       });
  
@@ -864,28 +874,80 @@
     });
 
     // わたMap連携ボタンの切り替え
-    document.getElementById('btn-watamap-link').addEventListener('click', () => {
-      isWatamapLinked = !isWatamapLinked;
+    document.getElementById('btn-watamap-link').addEventListener('click', async () => {
       const btn = document.getElementById('btn-watamap-link');
       
-      if (isWatamapLinked) {
-        btn.textContent = 'わたMap連携(ON)';
-        btn.style.background = '#ffc107'; // 黄色
-        btn.style.color = '#333';
-        showToast('わたMap連携をONにしました');
-      } else {
-        btn.textContent = 'わたMap連携(OFF)';
-        btn.style.background = '#17a2b8'; // 元の色
-        btn.style.color = 'white';
-        showToast('わたMap連携をOFFにしました');
+      if (btn.textContent.includes('準備中')) {
+        return; // 準備中のときは何もしない
       }
       
-      const prevSelected = userSelect.value;
-      updateDropdown(); // フラグが変わったのでリストを再生成
-      
-      // 選択していたデータがリストから消えた場合は選択変更イベントを発火させる
-      if (userSelect.value !== prevSelected) {
-        userSelect.dispatchEvent(new Event('change'));
+      if (isWatamapLinked) {
+        // ONのときに押すとOFFになり、裏側は何もしない
+        isWatamapLinked = false;
+        btn.textContent = 'わたMap連携(OFF)';
+        btn.style.background = '#17a2b8';
+        btn.style.color = 'white';
+        showToast('わたMap連携をOFFにしました');
+        
+        const prevSelected = userSelect.value;
+        updateDropdown();
+        if (userSelect.value !== prevSelected) {
+          userSelect.dispatchEvent(new Event('change'));
+        }
+        return;
+      }
+
+      // 連携OFFのときに押された場合
+      try {
+        // サーバー起動チェック
+        let isAlreadyRunning = false;
+        try {
+          const checkRes = await fetch(FUNCTION_URL, { method: 'GET' });
+          const checkText = await checkRes.text();
+          const lowerText = checkText.toLowerCase();
+          if (lowerText.includes('running') || lowerText.includes('already') || lowerText.includes('起動済') || lowerText.includes('実行中')) {
+            isAlreadyRunning = true;
+          }
+        } catch (e) {
+          console.log('GETチェックをスキップします', e);
+        }
+
+        if (isAlreadyRunning) {
+          // すでに起動している場合
+          isWatamapLinked = true;
+          btn.textContent = 'わたMap連携(ON)';
+          btn.style.background = '#ffc107'; // 黄色
+          btn.style.color = '#333';
+          showToast('わたMap連携をONにしました');
+        } else {
+          // まだ起動されていない場合
+          btn.textContent = 'わたMap連携(準備中)';
+          btn.style.background = '#343a40';
+          btn.style.color = 'white';
+          showToast('わたMap連携準備中');
+
+          // POSTで起動リクエスト
+          await fetch(FUNCTION_URL, { method: 'POST' });
+          
+          // 起動確認後
+          isWatamapLinked = true;
+          btn.textContent = 'わたMap連携(ON)';
+          btn.style.background = '#ffc107';
+          btn.style.color = '#333';
+          showToast('わたMap連携をONにしました');
+        }
+
+        const prevSelected = userSelect.value;
+        updateDropdown();
+        if (userSelect.value !== prevSelected) {
+          userSelect.dispatchEvent(new Event('change'));
+        }
+
+      } catch (err) {
+        console.error('サーバー通信エラー:', err);
+        showToast('サーバーとの通信に失敗しました');
+        btn.textContent = 'わたMap連携(OFF)';
+        btn.style.background = '#17a2b8';
       }
     });
 
@@ -1247,10 +1309,7 @@
 
   <!-- わたMap連携(サーバー起動) -->
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      // 作成したCloud FunctionsのURL
-      const FUNCTION_URL = 'https://start-wata-sync-184738315315.us-central1.run.app';
-      
+    document.addEventListener('DOMContentLoaded', () => {      
       // バックグラウンドでAPIを呼び出す
       fetch(FUNCTION_URL, { method: 'POST' })
         .then(response => response.text())
@@ -1258,6 +1317,5 @@
         .catch(err => console.error('VM起動リクエストに失敗:', err));
     });
   </script>
-
 </body>
 </html>
