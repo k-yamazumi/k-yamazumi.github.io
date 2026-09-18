@@ -263,7 +263,7 @@
     let currentVisualRotation = 0;
 
     let currentTileLayer = null;
-    let currentMapTile = 'osm';
+    let currentMapTile = 'esri_street';
     
     const slider = document.getElementById('distance-slider');
     const sliderContainer = document.getElementById('slider-container');
@@ -394,8 +394,9 @@
     ];
 
     const tileLayers = {
-      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }),
-      gsi_photo: L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', { attribution: '国土地理院' })
+      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }), // OpenStreetMap
+      gsi_photo: L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', { attribution: '国土地理院' }),
+      esri_street: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' }) // Esri World Street Map
     };
 
     mapFiles.forEach(filename => {
@@ -432,7 +433,7 @@
     function initMap() {
       map = L.map('map', { zoomControl: false }).setView([43.060, 141.353], 12);
       
-      currentTileLayer = tileLayers['osm'];
+      currentTileLayer = tileLayers['esri_street'];
       currentTileLayer.addTo(map);
       
       L.control.zoom({ position: 'topright' }).addTo(map);
@@ -940,11 +941,11 @@
     btnToggleMapTile.addEventListener('click', () => {
       if (currentTileLayer) map.removeLayer(currentTileLayer);
       
-      if (currentMapTile === 'osm') {
+      if (currentMapTile === 'esri_street') {
         currentMapTile = 'gsi_photo';
         btnToggleMapTile.innerText = '地図背景 (航空写真)';
       } else {
-        currentMapTile = 'osm';
+        currentMapTile = 'esri_street';
         btnToggleMapTile.innerText = '地図背景 (標準)';
       }
       
