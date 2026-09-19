@@ -632,8 +632,14 @@
       else map.removeLayer(landmarksLayer);
     });
 
-    chkMyDirection.addEventListener('change', () => {
-      updateMyDirectionLine();
+    chkMyDirection.addEventListener('change', (e) => {
+      // チェックが入れられた時、まだGPSモードでなければ取得を開始する
+      if (e.target.checked && !isGpsMode) {
+        startGpsMode();
+      } else {
+        // それ以外（チェックを外した時など）は線の表示/非表示を切り替えるだけ
+        updateMyDirectionLine();
+      }
     });
 
     function loadDefaultKml() {
@@ -1205,8 +1211,8 @@
       modalOverlay.style.display = 'none';
     });
 
-    document.getElementById('btn-gps').addEventListener('click', () => {
-      modalOverlay.style.display = 'none';
+    // GPSと向きの取得を開始する共通関数
+    function startGpsMode() {
       if (!navigator.geolocation) {
         alert('GPS機能に対応していません。');
         return;
@@ -1230,10 +1236,17 @@
           setReceiverPosition(pos.coords.latitude, pos.coords.longitude);
           map.setView([pos.coords.latitude, pos.coords.longitude], 13);
           showToast('現在地に設定しました。スマートフォンの向きを変えてみてください。');
+          updateMyDirectionLine(); // 取得完了時に線の状態も更新する
         },
         (err) => { alert('位置情報の取得に失敗しました。'); },
         { enableHighAccuracy: true, timeout: 10000 }
       );
+    }
+
+    // 「現在地を設定する (GPS)」ボタンのイベント
+    document.getElementById('btn-gps').addEventListener('click', () => {
+      modalOverlay.style.display = 'none';
+      startGpsMode();
     });
 
     document.getElementById('btn-map-select').addEventListener('click', () => {
