@@ -635,7 +635,7 @@
     chkMyDirection.addEventListener('change', (e) => {
       // チェックが入れられた時、まだGPSモードでなければ取得を開始する
       if (e.target.checked && !isGpsMode) {
-        startGpsMode();
+        startGpsMode(false);
       } else {
         // それ以外（チェックを外した時など）は線の表示/非表示を切り替えるだけ
         updateMyDirectionLine();
@@ -1212,7 +1212,7 @@
     });
 
     // GPSと向きの取得を開始する共通関数
-    function startGpsMode() {
+    function startGpsMode(updatePosition = true) {
       if (!navigator.geolocation) {
         alert('GPS機能に対応していません。');
         return;
@@ -1229,13 +1229,22 @@
         window.addEventListener('deviceorientation', handleOrientation);
       }
 
-      showToast('現在地を取得中...');
+      showToast(updatePosition ? '現在地を取得中...' : '向き情報を取得中...');
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           isGpsMode = true; 
-          setReceiverPosition(pos.coords.latitude, pos.coords.longitude);
-          map.setView([pos.coords.latitude, pos.coords.longitude], 13);
-          showToast('現在地に設定しました。スマートフォンの向きを変えてみてください。');
+          
+          // updatePosition が true の時のみ位置を更新
+          if (updatePosition) {
+            setReceiverPosition(pos.coords.latitude, pos.coords.longitude);
+            map.setView([pos.coords.latitude, pos.coords.longitude], 13);
+            showToast('現在地に設定しました。スマートフォンの向きを変えてみてください。');
+          } else {
+            // 位置は更新せず、既存マーカーに対して向き表示の更新のみ行う
+            updateReceiverIcon();
+            showToast('向きの取得を開始しました。');
+          }
+          
           updateMyDirectionLine(); // 取得完了時に線の状態も更新する
         },
         (err) => { alert('位置情報の取得に失敗しました。'); },
@@ -1246,7 +1255,7 @@
     // 「現在地を設定する (GPS)」ボタンのイベント
     document.getElementById('btn-gps').addEventListener('click', () => {
       modalOverlay.style.display = 'none';
-      startGpsMode();
+      startGpsMode(true);
     });
 
     document.getElementById('btn-map-select').addEventListener('click', () => {
