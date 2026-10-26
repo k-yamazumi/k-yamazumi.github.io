@@ -32,11 +32,13 @@
     .target-btn.active { border-color:var(--blue); box-shadow:inset 0 0 0 1px var(--blue); background:#eff7ff; }
     .target-btn .target-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; background:#1687d9; }
     .target-btn[data-target="B"] .target-dot { background:#e15151; }
-    .point-card { border:1px solid var(--line); border-radius:7px; padding:9px; margin:7px 0; display:flex; align-items:center; gap:8px; }
-    .point-card .name { min-width:22px; font-weight:700; }
-    .point-card .coords { color:#475569; font:12px ui-monospace,SFMono-Regular,Menlo,monospace; flex:1; overflow-wrap:anywhere; }
+    .point-card { border:1px solid var(--line); border-radius:7px; padding:7px 6px; margin:7px 0; display:grid; grid-template-columns:18px minmax(0,1fr) minmax(0,1fr) auto auto; align-items:end; gap:5px; }
+    .point-card .name { align-self:center; font-weight:700; text-align:center; }
     .small-btn { border:1px solid var(--line); background:#fff; border-radius:5px; padding:4px 8px; color:#334155; }
     .small-btn:hover { background:#f1f5f9; }
+    .coordinate-field { min-width:0; font-size:10px; color:#475569; }
+    .coordinate-field input { display:block; width:100%; min-width:0; margin-top:3px; padding:7px 4px; border:1px solid #cbd5e1; border-radius:5px; font-size:12px; }
+    .point-card .small-btn { padding:6px 7px; font-size:12px; }
     .input-line { display:flex; align-items:center; gap:7px; margin:8px 0; }
     .input-line label { font-size:13px; min-width:66px; }
     .input-line input[type="number"] { width:100%; min-width:0; border:1px solid #cbd5e1; border-radius:6px; padding:8px; }
@@ -75,8 +77,20 @@
           <button class="target-btn active" data-target="A" type="button"><span class="target-dot"></span>A地点を選択</button>
           <button class="target-btn" data-target="B" type="button"><span class="target-dot"></span>B地点を選択</button>
         </div>
-        <div id="pointA" class="point-card"><span class="name">A</span><span class="coords">未設定</span><button class="small-btn clear-point" data-point="A" type="button">削除</button></div>
-        <div id="pointB" class="point-card"><span class="name">B</span><span class="coords">未設定</span><button class="small-btn clear-point" data-point="B" type="button">削除</button></div>
+        <div id="pointA" class="point-card">
+          <span class="name">A</span>
+          <label class="coordinate-field" for="latA">緯度<input id="latA" type="text" inputmode="decimal" placeholder="緯度"></label>
+          <label class="coordinate-field" for="lngA">経度<input id="lngA" type="text" inputmode="decimal" placeholder="経度"></label>
+          <button class="small-btn set-coordinates" data-point="A" type="button">設定</button>
+          <button class="small-btn clear-point" data-point="A" type="button">削除</button>
+        </div>
+        <div id="pointB" class="point-card">
+          <span class="name">B</span>
+          <label class="coordinate-field" for="latB">緯度<input id="latB" type="text" inputmode="decimal" placeholder="緯度"></label>
+          <label class="coordinate-field" for="lngB">経度<input id="lngB" type="text" inputmode="decimal" placeholder="経度"></label>
+          <button class="small-btn set-coordinates" data-point="B" type="button">設定</button>
+          <button class="small-btn clear-point" data-point="B" type="button">削除</button>
+        </div>
         <button id="clearBoth" class="small-btn" type="button">2地点をクリア</button>
         <p class="hint">地図をクリックすると、選択中の地点を配置できます。マーカーはドラッグで移動できます。送信所・電測ポイントをクリックすると、選択中の地点に設定します。</p>
       </section>
@@ -84,7 +98,7 @@
         <h2>距離差</h2>
         <div class="input-line">
           <label for="excessValue">距離差</label>
-          <input id="excessValue" type="number" min="0" step="any" value="100">
+          <input id="excessValue" type="number" min="0" step="any" value="1000">
           <select id="distanceUnit" aria-label="距離差の入力単位">
             <option value="m" selected>メートル</option>
             <option value="us">マイクロ秒</option>
@@ -107,7 +121,7 @@
   <script>
     'use strict';
 
-    // GASの地点データAPI。レスポンスは「送信所」「電測ポイント」の配列。
+    // GASの地点データAPI。レスポンスは「送信所」「電測ポイント」の配列を想定。
     const DATA_API_URL = 'https://script.google.com/macros/s/AKfycbxhCLeFe1jrzZ934MwQl-4pyHTTcJLSZilaVcR5p67qIWvgPn90Ie6-lqHLg6nlv01BlQ/exec';
     // 指定されたEsri World Street MapタイルURL。
     const ESRI_TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
@@ -137,10 +151,15 @@
     const layout = $('layout');
 
     function updatePointCard(name) {
-      const coords = $(name === 'A' ? 'pointA' : 'pointB').querySelector('.coords');
-      coords.textContent = points[name]
-        ? `${points[name].lat.toFixed(6)}, ${points[name].lng.toFixed(6)}`
-        : '未設定';
+      const latitudeInput = $(`lat${name}`);
+      const longitudeInput = $(`lng${name}`);
+      if (points[name]) {
+        latitudeInput.value = points[name].lat.toFixed(8);
+        longitudeInput.value = points[name].lng.toFixed(8);
+      } else {
+        latitudeInput.value = '';
+        longitudeInput.value = '';
+      }
     }
 
     function endpointIcon(name) {
@@ -157,6 +176,45 @@
       document.querySelectorAll('.target-btn').forEach((item) => {
         item.classList.toggle('active', item.dataset.target === name);
       });
+    }
+
+    function parseCoordinate(value, label, limit) {
+      const text = value.trim();
+      if (!text) throw new Error(`${label}を入力してください。`);
+
+      let result;
+      const dmsMatch = text.match(/^([+-]?)(\d{1,3})\.(\d{1,2})\.(\d{1,2}(?:\.\d+)?)$/);
+      if (dmsMatch) {
+        const sign = dmsMatch[1] === '-' ? -1 : 1;
+        const degrees = Number(dmsMatch[2]);
+        const minutes = Number(dmsMatch[3]);
+        const seconds = Number(dmsMatch[4]);
+        if (minutes >= 60 || seconds >= 60) {
+          throw new Error(`${label}の分・秒は60未満で入力してください。`);
+        }
+        result = sign * (degrees + minutes / 60 + seconds / 3600);
+      } else {
+        // 10進法は通常の小数表記として読み取る。
+        if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) {
+          throw new Error(`${label}は10進法または度.分.秒の形式で入力してください。`);
+        }
+        result = Number(text);
+      }
+
+      if (!Number.isFinite(result) || Math.abs(result) > limit) {
+        throw new Error(`${label}は${limit}〜-${limit}の範囲で入力してください。`);
+      }
+      return result;
+    }
+
+    function applyCoordinateInputs(name) {
+      try {
+        const lat = parseCoordinate($(`lat${name}`).value, '緯度', 90);
+        const lng = parseCoordinate($(`lng${name}`).value, '経度', 180);
+        setEndpoint(name, L.latLng(lat, lng));
+      } catch (error) {
+        window.alert(error.message);
+      }
     }
 
     function setEndpoint(name, latlng) {
@@ -203,6 +261,16 @@
       });
     });
     document.querySelectorAll('.clear-point').forEach((button) => button.addEventListener('click', () => clearEndpoint(button.dataset.point)));
+    document.querySelectorAll('.set-coordinates').forEach((button) => {
+      button.addEventListener('click', () => applyCoordinateInputs(button.dataset.point));
+    });
+    for (const name of ['A', 'B']) {
+      for (const axis of ['lat', 'lng']) {
+        $(`${axis}${name}`).addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') applyCoordinateInputs(name);
+        });
+      }
+    }
     $('clearBoth').addEventListener('click', () => { clearEndpoint('A'); clearEndpoint('B'); });
     map.on('click', (event) => setEndpoint(activeTarget, event.latlng));
 
@@ -325,10 +393,11 @@
         marker.bindTooltip(`${escapeHtml(point.name)}（${type === 'station' ? '送信所' : '電測ポイント'}）`, { direction: 'top', offset: [0, -5] });
         marker.on('click', (event) => {
           if (event.originalEvent) L.DomEvent.stopPropagation(event.originalEvent);
-          setEndpoint(activeTarget, L.latLng(point.lat, point.lng));
+          const selectedTarget = activeTarget;
+          setEndpoint(selectedTarget, L.latLng(point.lat, point.lng));
           L.popup({ closeButton: true })
             .setLatLng([point.lat, point.lng])
-            .setContent(`<div class="kml-popup"><strong>${escapeHtml(point.name)}</strong><br>${type === 'station' ? '送信所' : '電測ポイント'} → ${activeTarget}地点に設定しました。</div>`)
+            .setContent(`<div class="kml-popup"><strong>${escapeHtml(point.name)}</strong><br>${type === 'station' ? '送信所' : '電測ポイント'} → ${selectedTarget}地点に設定しました。</div>`)
             .openOn(map);
         });
       });
