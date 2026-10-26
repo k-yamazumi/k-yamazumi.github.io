@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>電波遅延差 楕円描画ツール</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root { color-scheme: light; --ink:#1f2937; --muted:#64748b; --line:#dbe2ea; --blue:#1769aa; --bg:#f4f6f8; }
+    * { box-sizing:border-box; }
+    html, body { height:100%; margin:0; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); }
+    body { display:flex; flex-direction:column; overflow:hidden; background:var(--bg); }
+    header { flex:0 0 52px; display:flex; align-items:center; gap:12px; padding:0 14px; background:#123b5d; color:#fff; box-shadow:0 1px 5px #0003; z-index:1000; }
+    header h1 { font-size:16px; margin:0; font-weight:650; flex:1; }
+    button, select, input { font:inherit; }
+    button { cursor:pointer; }
+    .header-btn { border:1px solid #ffffff70; color:#fff; background:#ffffff16; border-radius:6px; padding:6px 10px; }
+    .header-btn:hover { background:#ffffff2b; }
+    #layout { min-height:0; flex:1; display:flex; position:relative; }
+    #map { flex:1; min-width:0; height:100%; background:#e8edf2; }
+    #panel { width:340px; flex:0 0 340px; height:100%; overflow:auto; background:#fff; border-right:1px solid var(--line); padding:14px; transition:width .18s ease, flex-basis .18s ease, padding .18s ease; }
+    #layout.panel-hidden #panel { width:0; flex-basis:0; padding:0; overflow:hidden; border:0; }
+    .panel-toggle { position:absolute; z-index:900; left:340px; top:50%; transform:translateY(-50%); width:30px; height:58px; display:flex; align-items:center; justify-content:center; border:1px solid #d1d5db; border-left:0; border-radius:0 8px 8px 0; color:#4b5563; background:#fff; box-shadow:1px 1px 5px #0002; }
+    .panel-toggle:hover { background:#f8fafc; color:#111827; }
+    .panel-toggle .chevron { font-size:24px; line-height:1; font-family:Arial,sans-serif; }
+    #layout.panel-hidden .panel-toggle { left:0; }
+    .section { border:1px solid var(--line); border-radius:9px; padding:12px; margin-bottom:12px; background:#fff; }
+    .section h2 { font-size:14px; margin:0 0 10px; }
+    .hint { color:var(--muted); font-size:12px; line-height:1.55; margin:7px 0 0; }
+    .target-row { display:flex; gap:8px; margin-bottom:10px; }
+    .target-btn { flex:1; border:1px solid var(--line); border-radius:7px; padding:8px 6px; background:#fff; color:var(--ink); }
+    .target-btn.active { border-color:var(--blue); box-shadow:inset 0 0 0 1px var(--blue); background:#eff7ff; }
+    .target-btn .target-dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; background:#1687d9; }
+    .target-btn[data-target="B"] .target-dot { background:#e15151; }
+    .point-card { border:1px solid var(--line); border-radius:7px; padding:9px; margin:7px 0; display:flex; align-items:center; gap:8px; }
+    .point-card .name { min-width:22px; font-weight:700; }
+    .point-card .coords { color:#475569; font:12px ui-monospace,SFMono-Regular,Menlo,monospace; flex:1; overflow-wrap:anywhere; }
+    .small-btn { border:1px solid var(--line); background:#fff; border-radius:5px; padding:4px 8px; color:#334155; }
+    .small-btn:hover { background:#f1f5f9; }
+    .input-line { display:flex; align-items:center; gap:7px; margin:8px 0; }
+    .input-line label { font-size:13px; min-width:66px; }
+    .input-line input[type="number"] { width:100%; min-width:0; border:1px solid #cbd5e1; border-radius:6px; padding:8px; }
+    .input-line select { border:1px solid #cbd5e1; border-radius:6px; padding:7px; background:#fff; }
+    #distanceUnit { min-width:100px; }
+    #drawBtn { width:100%; padding:10px; border:0; border-radius:7px; background:var(--blue); color:#fff; font-weight:650; margin-top:5px; }
+    #drawBtn:hover { background:#0e578f; }
+    #clearBoth { margin-top:8px; width:100%; }
+    .layer-row { display:flex; align-items:center; gap:8px; padding:5px 0; font-size:13px; }
+    .layer-row input { width:16px; height:16px; }
+    .layer-row.disabled { color:#9ca3af; cursor:not-allowed; }
+    .layer-row.disabled input { cursor:not-allowed; }
+    .leaflet-tooltip { font-size:12px; }
+    .endpoint-icon { display:flex; align-items:center; justify-content:center; width:28px; height:28px; border:3px solid white; border-radius:50%; color:white; font:bold 13px system-ui; box-shadow:0 1px 5px #0008; }
+    .endpoint-a { background:#1687d9; }
+    .endpoint-b { background:#e15151; }
+    .kml-popup { line-height:1.5; }
+    @media (max-width:700px) {
+      header { flex-basis:48px; padding:0 9px; }
+      header h1 { font-size:14px; }
+      #panel { position:absolute; left:0; right:auto; top:0; bottom:0; z-index:800; width:min(88vw,340px); flex-basis:min(88vw,340px); box-shadow:3px 0 12px #0002; }
+      #layout.panel-hidden #panel { width:0; flex-basis:0; }
+      .panel-toggle { left:min(88vw,340px); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>電波遅延差 楕円描画ツール</h1>
+  </header>
+  <main id="layout">
+    <aside id="panel">
+      <section class="section">
+        <h2>地点</h2>
+        <div class="target-row" role="group" aria-label="地図クリック時の設定先">
+          <button class="target-btn active" data-target="A" type="button"><span class="target-dot"></span>A地点を選択</button>
+          <button class="target-btn" data-target="B" type="button"><span class="target-dot"></span>B地点を選択</button>
+        </div>
+        <div id="pointA" class="point-card"><span class="name">A</span><span class="coords">未設定</span><button class="small-btn clear-point" data-point="A" type="button">削除</button></div>
+        <div id="pointB" class="point-card"><span class="name">B</span><span class="coords">未設定</span><button class="small-btn clear-point" data-point="B" type="button">削除</button></div>
+        <button id="clearBoth" class="small-btn" type="button">2地点をクリア</button>
+        <p class="hint">地図をクリックすると、選択中の地点を配置できます。マーカーはドラッグで移動できます。送信所・電測ポイントをクリックすると、選択中の地点に設定します。</p>
+      </section>
+      <section class="section">
+        <h2>距離差</h2>
+        <div class="input-line">
+          <label for="excessValue">距離差</label>
+          <input id="excessValue" type="number" min="0" step="any" value="100">
+          <select id="distanceUnit" aria-label="距離差の入力単位">
+            <option value="m" selected>メートル</option>
+            <option value="us">マイクロ秒</option>
+            <option value="ms">ミリ秒</option>
+          </select>
+        </div>
+        <p class="hint">マイクロ秒・ミリ秒は光速 299,792,458 m/s で距離に換算します。楕円上の任意の点からA・Bまでの距離の和が「A-B直線距離＋距離差」になります。</p>
+        <button id="drawBtn" type="button">描画</button>
+      </section>
+      <section class="section">
+        <h2>地点データ</h2>
+        <label class="layer-row"><input id="toggleStations" type="checkbox" checked><span>送信所を表示</span></label>
+        <label class="layer-row"><input id="toggleSurvey" type="checkbox" checked><span>電測ポイントを表示</span></label>
+      </section>
+    </aside>
+    <button id="togglePanel" class="panel-toggle" type="button" aria-label="設定を隠す" aria-controls="panel" aria-expanded="true"><span id="panelChevron" class="chevron" aria-hidden="true">‹</span></button>
+    <div id="map" aria-label="地図"></div>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    'use strict';
+
+    // GASの地点データAPI。レスポンスは「送信所」「電測ポイント」の配列。
+    const DATA_API_URL = 'https://script.google.com/macros/s/AKfycbxhCLeFe1jrzZ934MwQl-4pyHTTcJLSZilaVcR5p67qIWvgPn90Ie6-lqHLg6nlv01BlQ/exec';
+    // 指定されたEsri World Street MapタイルURL。
+    const ESRI_TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+    const SPEED_OF_LIGHT = 299792458; // m/s
+    const EARTH_RADIUS_M = 6371008.8;
+    const ELLIPSE_SEGMENTS = 180;
+    const LOCATION_CACHE_KEY = 'radio-delay-ellipse-location-data-v1';
+
+    const map = L.map('map', { zoomControl: true }).setView([43.06, 141.35], 8);
+    L.tileLayer(ESRI_TILE_URL, {
+      maxZoom: 19,
+      attribution: 'Tiles &copy; Esri — Source: Esri, DeLorme, NAVTEQ, USGS, and other contributors'
+    }).addTo(map);
+
+    map.createPane('ellipsePane');
+    map.getPane('ellipsePane').style.zIndex = '625';
+    const ellipseLayer = L.layerGroup().addTo(map);
+    const stationsLayer = L.layerGroup().addTo(map);
+    const surveyLayer = L.layerGroup().addTo(map);
+    const points = { A: null, B: null };
+    const endpointMarkers = { A: null, B: null };
+    let activeTarget = 'A';
+    let stationPoints = [];
+    let surveyPoints = [];
+
+    const $ = (id) => document.getElementById(id);
+    const layout = $('layout');
+
+    function updatePointCard(name) {
+      const coords = $(name === 'A' ? 'pointA' : 'pointB').querySelector('.coords');
+      coords.textContent = points[name]
+        ? `${points[name].lat.toFixed(6)}, ${points[name].lng.toFixed(6)}`
+        : '未設定';
+    }
+
+    function endpointIcon(name) {
+      return L.divIcon({
+        className: '',
+        html: `<span class="endpoint-icon endpoint-${name.toLowerCase()}">${name}</span>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+    }
+
+    function setActiveTarget(name) {
+      activeTarget = name;
+      document.querySelectorAll('.target-btn').forEach((item) => {
+        item.classList.toggle('active', item.dataset.target === name);
+      });
+    }
+
+    function setEndpoint(name, latlng) {
+      points[name] = L.latLng(latlng.lat, latlng.lng);
+      if (endpointMarkers[name]) {
+        endpointMarkers[name].setLatLng(points[name]);
+      } else {
+        endpointMarkers[name] = L.marker(points[name], {
+          draggable: true,
+          icon: endpointIcon(name),
+          title: `${name}地点（ドラッグして移動）`,
+          riseOnHover: true
+        }).addTo(map);
+        endpointMarkers[name].on('dragend', () => {
+          points[name] = endpointMarkers[name].getLatLng();
+          updatePointCard(name);
+          clearEllipse();
+        });
+      }
+      updatePointCard(name);
+      clearEllipse();
+
+      // A地点を設定したとき、B地点が未設定なら自動でB地点の選択モードにする。
+      if (name === 'A' && !points.B) setActiveTarget('B');
+    }
+
+    function clearEndpoint(name) {
+      points[name] = null;
+      if (endpointMarkers[name]) {
+        map.removeLayer(endpointMarkers[name]);
+        endpointMarkers[name] = null;
+      }
+      updatePointCard(name);
+      clearEllipse();
+    }
+
+    function clearEllipse() {
+      ellipseLayer.clearLayers();
+    }
+
+    document.querySelectorAll('.target-btn').forEach((button) => {
+      button.addEventListener('click', () => {
+        setActiveTarget(button.dataset.target);
+      });
+    });
+    document.querySelectorAll('.clear-point').forEach((button) => button.addEventListener('click', () => clearEndpoint(button.dataset.point)));
+    $('clearBoth').addEventListener('click', () => { clearEndpoint('A'); clearEndpoint('B'); });
+    map.on('click', (event) => setEndpoint(activeTarget, event.latlng));
+
+    $('togglePanel').addEventListener('click', () => {
+      const hidden = layout.classList.toggle('panel-hidden');
+      $('panelChevron').textContent = hidden ? '›' : '‹';
+      $('togglePanel').setAttribute('aria-label', hidden ? '設定を表示' : '設定を隠す');
+      $('togglePanel').setAttribute('aria-expanded', String(!hidden));
+      window.setTimeout(() => map.invalidateSize(), 220);
+    });
+
+    $('distanceUnit').addEventListener('change', () => {
+      clearEllipse();
+    });
+    $('excessValue').addEventListener('input', clearEllipse);
+
+    function haversineDistance(p1, p2) {
+      const rad = (degrees) => degrees * Math.PI / 180;
+      const lat1 = rad(p1.lat), lat2 = rad(p2.lat);
+      const dLat = lat2 - lat1;
+      const dLon = rad(p2.lng - p1.lng);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      return 2 * EARTH_RADIUS_M * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    // 球面上の初期方位角。北を0度、時計回り。
+    function initialBearing(p1, p2) {
+      const rad = (degrees) => degrees * Math.PI / 180;
+      const lat1 = rad(p1.lat), lat2 = rad(p2.lat);
+      const dLon = rad(p2.lng - p1.lng);
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    // 起点から方位・距離を指定して球面上の点を求める。
+    function destination(start, bearingDegrees, distanceMeters) {
+      const rad = (degrees) => degrees * Math.PI / 180;
+      const deg = (radians) => radians * 180 / Math.PI;
+      const bearing = rad(bearingDegrees);
+      const angularDistance = distanceMeters / EARTH_RADIUS_M;
+      const lat1 = rad(start.lat), lon1 = rad(start.lng);
+      const lat2 = Math.asin(Math.sin(lat1) * Math.cos(angularDistance) + Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing));
+      const lon2 = lon1 + Math.atan2(Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1), Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2));
+      return L.latLng(deg(lat2), ((deg(lon2) + 540) % 360) - 180);
+    }
+
+    function getExcessMeters() {
+      const value = Number($('excessValue').value);
+      if (!Number.isFinite(value) || value < 0) return null;
+      if ($('distanceUnit').value === 'm') return value;
+      const secondsPerUnit = $('distanceUnit').value === 'us' ? 1e-6 : 1e-3;
+      return value * secondsPerUnit * SPEED_OF_LIGHT;
+    }
+
+    function drawEllipse() {
+      if (!points.A || !points.B) {
+        window.alert('地点を2か所設定してください。');
+        return;
+      }
+      const excess = getExcessMeters();
+      if (excess === null) {
+        window.alert('距離差には0以上の数値を入力してください。');
+        return;
+      }
+
+      const p1 = points.A;
+      const p2 = points.B;
+      const focalDistance = haversineDistance(p1, p2);
+      const semiMajor = (focalDistance + excess) / 2;
+      const c = focalDistance / 2;
+      const semiMinor = Math.sqrt(Math.max(0, semiMajor * semiMajor - c * c));
+      const center = destination(p1, initialBearing(p1, p2), c);
+      const axisBearing = initialBearing(p1, p2);
+      const coordinates = [];
+
+      if (semiMajor === 0) {
+        window.alert('距離差と2地点間距離がともに0のため、楕円を描けません。');
+        ellipseLayer.clearLayers();
+        return;
+      }
+
+      if (semiMinor < 0.001) {
+        coordinates.push(p1, p2);
+      } else {
+        for (let i = 0; i <= ELLIPSE_SEGMENTS; i++) {
+          const theta = 2 * Math.PI * i / ELLIPSE_SEGMENTS;
+          const x = semiMajor * Math.cos(theta);
+          const y = semiMinor * Math.sin(theta);
+          const distance = Math.hypot(x, y);
+          const bearing = axisBearing + Math.atan2(y, x) * 180 / Math.PI;
+          coordinates.push(destination(center, bearing, distance));
+        }
+      }
+
+      ellipseLayer.clearLayers();
+      L.polyline(coordinates, { pane: 'ellipsePane', color: '#f4511e', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round' }).addTo(ellipseLayer);
+    }
+    $('drawBtn').addEventListener('click', drawEllipse);
+
+    function normalizePoint(item) {
+      const lat = Number(item && item.lat);
+      const lng = Number(item && item.lng);
+      if (!item || typeof item.name !== 'string' || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+      return { name: item.name, lat, lng };
+    }
+
+    function addKmlPoints(pointsArray, layer, type) {
+      pointsArray.forEach((item) => {
+        const point = normalizePoint(item);
+        if (!point) return;
+        const markerColor = type === 'station' ? '#2d6cdf' : '#16845b';
+        const marker = L.circleMarker([point.lat, point.lng], {
+          radius: 6,
+          color: '#fff',
+          weight: 2,
+          fillColor: markerColor,
+          fillOpacity: 0.95
+        }).addTo(layer);
+        marker.bindTooltip(`${escapeHtml(point.name)}（${type === 'station' ? '送信所' : '電測ポイント'}）`, { direction: 'top', offset: [0, -5] });
+        marker.on('click', (event) => {
+          if (event.originalEvent) L.DomEvent.stopPropagation(event.originalEvent);
+          setEndpoint(activeTarget, L.latLng(point.lat, point.lng));
+          L.popup({ closeButton: true })
+            .setLatLng([point.lat, point.lng])
+            .setContent(`<div class="kml-popup"><strong>${escapeHtml(point.name)}</strong><br>${type === 'station' ? '送信所' : '電測ポイント'} → ${activeTarget}地点に設定しました。</div>`)
+            .openOn(map);
+        });
+      });
+    }
+
+    function escapeHtml(value) {
+      return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+    }
+
+    function getValidatedLocationData(data) {
+      if (!data || !Array.isArray(data['送信所']) || !Array.isArray(data['電測ポイント'])) {
+        throw new Error('地点データの形式が不正です');
+      }
+      return {
+        '送信所': data['送信所'].filter(normalizePoint),
+        '電測ポイント': data['電測ポイント'].filter(normalizePoint)
+      };
+    }
+
+    function setLocationLayers(data) {
+      stationPoints = data['送信所'];
+      surveyPoints = data['電測ポイント'];
+      stationsLayer.clearLayers();
+      surveyLayer.clearLayers();
+      addKmlPoints(stationPoints, stationsLayer, 'station');
+      addKmlPoints(surveyPoints, surveyLayer, 'survey');
+      if ($('toggleStations').checked) stationsLayer.addTo(map);
+      else map.removeLayer(stationsLayer);
+      if ($('toggleSurvey').checked) surveyLayer.addTo(map);
+      else map.removeLayer(surveyLayer);
+    }
+
+    function disableLocationToggles() {
+      for (const id of ['toggleStations', 'toggleSurvey']) {
+        const checkbox = $(id);
+        checkbox.checked = false;
+        checkbox.disabled = true;
+        checkbox.closest('.layer-row').classList.add('disabled');
+      }
+      map.removeLayer(stationsLayer);
+      map.removeLayer(surveyLayer);
+    }
+
+    function readLocationCache() {
+      try {
+        const raw = localStorage.getItem(LOCATION_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = getValidatedLocationData(JSON.parse(raw));
+        if (parsed['送信所'].length + parsed['電測ポイント'].length === 0) return null;
+        return parsed;
+      } catch (error) {
+        console.warn('地点データのキャッシュを利用できません。', error);
+        return null;
+      }
+    }
+
+    async function loadLocationData() {
+      try {
+        const response = await fetch(DATA_API_URL, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = getValidatedLocationData(await response.json());
+        setLocationLayers(data);
+        try {
+          localStorage.setItem(LOCATION_CACHE_KEY, JSON.stringify(data));
+        } catch (cacheError) {
+          console.warn('地点データのキャッシュ保存に失敗しました。', cacheError);
+        }
+        console.info(`地点データを最新データから読み込みました（送信所 ${data['送信所'].length}件、電測ポイント ${data['電測ポイント'].length}件）。`);
+      } catch (error) {
+        console.error('最新の地点データの読み込みに失敗しました。', error);
+        const cachedData = readLocationCache();
+        if (cachedData) {
+          setLocationLayers(cachedData);
+          console.warn(`キャッシュの地点データを使用します（送信所 ${cachedData['送信所'].length}件、電測ポイント ${cachedData['電測ポイント'].length}件）。`);
+        } else {
+          disableLocationToggles();
+          console.error('使用できるキャッシュデータがないため、地点データ表示を無効にしました。');
+        }
+      }
+    }
+
+    $('toggleStations').addEventListener('change', (event) => {
+      if (event.target.checked) stationsLayer.addTo(map); else map.removeLayer(stationsLayer);
+    });
+    $('toggleSurvey').addEventListener('change', (event) => {
+      if (event.target.checked) surveyLayer.addTo(map); else map.removeLayer(surveyLayer);
+    });
+    loadLocationData();
+  </script>
+</body>
+</html>
