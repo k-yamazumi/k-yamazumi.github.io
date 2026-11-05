@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Markdownビューアー</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#172033;background:#f2f5f9;font-synthesis:none}*{box-sizing:border-box}body{margin:0;min-height:100vh}.app{max-width:1500px;margin:auto;padding:18px 22px 22px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:14px}.brand h1{font-size:21px;margin:0 0 3px}.brand p{font-size:12px;color:#697386;margin:0}.actions{display:flex;gap:8px;flex-wrap:wrap}button,.file-button{border:1px solid #cdd5e1;background:#fff;color:#233047;border-radius:8px;padding:9px 13px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}button:hover,.file-button:hover{background:#f0f4fa;border-color:#99a8bd}button.primary{background:#2459c4;color:#fff;border-color:#2459c4}button.primary:hover{background:#1748a9}.file-button input{display:none}.workspace{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,1fr);gap:14px;min-height:calc(100vh - 112px)}.panel{background:#fff;border:1px solid #dce2eb;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:450px;box-shadow:0 2px 8px #2330470a}.panel-head{height:44px;padding:0 15px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e7ebf1;font-size:12px;font-weight:700;color:#566176}.panel-head .hint{font-weight:400;color:#929bad}.editor{resize:none;border:0;outline:0;padding:18px;width:100%;flex:1;min-height:400px;font:14px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;color:#182336;tab-size:2}.editor:focus{box-shadow:inset 0 0 0 2px #2459c422}.preview{padding:24px 30px;overflow:auto;flex:1;line-height:1.75;overflow-wrap:anywhere}.preview h1,.preview h2,.preview h3,.preview h4,.preview h5,.preview h6{line-height:1.35;margin:1.25em 0 .55em;color:#15223a}.preview h1{font-size:2em;border-bottom:1px solid #e5e9ef;padding-bottom:.3em;margin-top:.25em}.preview h2{font-size:1.55em;border-bottom:1px solid #edf0f4;padding-bottom:.25em}.preview h3{font-size:1.25em}.preview p{margin:.7em 0}.preview a{color:#2057b7;text-decoration:underline}.preview blockquote{margin:1em 0;padding:.2em 1em;border-left:4px solid #b8c6dc;color:#5a6577;background:#f7f9fc}.preview ul,.preview ol{padding-left:1.7em}.preview li{margin:.2em 0}.preview hr{border:0;border-top:1px solid #dce2eb;margin:1.5em 0}.preview code{font: .9em ui-monospace,SFMono-Regular,Consolas,monospace;background:#eef1f6;padding:.12em .35em;border-radius:4px}.preview pre{background:#172033;color:#e9eef7;padding:15px 17px;border-radius:8px;overflow:auto;line-height:1.55}.preview pre code{background:none;color:inherit;padding:0}.preview table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.94em}.preview th,.preview td{border:1px solid #dce2eb;padding:7px 10px;text-align:left}.preview th{background:#f3f6fa}.preview img{max-width:100%;height:auto}.preview input[type=checkbox]{margin-right:.45em;vertical-align:middle}.status{height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-top:1px solid #e7ebf1;color:#7b8596;font-size:11px}.drop-overlay{display:none;position:fixed;inset:12px;z-index:10;border:3px dashed #2459c4;border-radius:18px;background:#2459c4e8;color:white;align-items:center;justify-content:center;text-align:center;font-size:22px;font-weight:700;pointer-events:none}.drop-overlay.show{display:flex}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}@media(max-width:760px){.app{padding:12px}.workspace{grid-template-columns:1fr;min-height:0}.panel{min-height:48vh}.editor{min-height:40vh}.preview{min-height:40vh;padding:20px}.brand h1{font-size:19px}.actions button,.file-button{padding:8px 10px;font-size:12px}}@media print{body{background:white}.app{max-width:none;padding:0}.topbar,.editor-panel,.preview-panel .panel-head,.status,.drop-overlay{display:none!important}.workspace{display:block;min-height:0}.preview-panel{display:block;border:0;border-radius:0;box-shadow:none;min-height:0}.preview{padding:0;overflow:visible}.preview a{color:inherit;text-decoration:none}.preview pre{white-space:pre-wrap;word-break:break-word;-webkit-print-color-adjust:exact;print-color-adjust:exact}thead{display:table-header-group}tr{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><h1>Markdownビューアー</h1></div>
+    <nav class="actions" aria-label="操作">
+      <label class="file-button">MDファイルを開く<input id="fileInput" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain"></label>
+      <button id="saveMd">MDで保存</button><button id="saveTxt">TXTで保存</button><button class="primary" id="printBtn">印刷</button>
+    </nav>
+  </header>
+  <main class="workspace">
+    <section class="panel editor-panel" aria-label="Markdown入力欄">
+      <div class="panel-head"><span>Markdown</span><span class="hint">入力またはファイルをドロップ</span></div>
+      <textarea id="source" class="editor" spellcheck="false" aria-label="Markdown本文"></textarea>
+      <div class="status"><span id="counts"></span></div>
+    </section>
+    <section class="panel preview-panel" aria-label="プレビュー">
+      <div class="panel-head"><span>プレビュー</span><span class="hint">印刷ではプレビューのみ出力</span></div>
+      <article id="preview" class="preview"></article>
+    </section>
+  </main>
+</div>
+<div id="dropOverlay" class="drop-overlay">Markdownファイルをドロップ</div>
+<script>
+"use strict";
+
+/* =========================================================
+   HTML要素とアプリの状態
+   ========================================================= */
+
+const sourceEl = document.getElementById("source");
+const previewEl = document.getElementById("preview");
+const countsEl = document.getElementById("counts");
+const fileInputEl = document.getElementById("fileInput");
+const dropOverlayEl = document.getElementById("dropOverlay");
+
+let currentBaseName = "document";
+let dragCounter = 0;
+
+/* =========================================================
+   最初に表示するサンプル
+   ========================================================= */
+
+const sampleMarkdown = `# Markdownビューアーへようこそ 👋
+
+左側にMarkdownを入力するか、.mdファイルを画面にドロップしてください。
+
+## 書式の例
+
+- **太字** と *斜体*、~~取り消し線~~
+- リンク：[Markdownガイド](https://example.com)
+- 絵文字：📺 🎉 😊
+
+> 引用文も表示できます。
+
+\`\`\`text
+コードブロック
+\`\`\`
+
+| 項目 | 内容 |
+|:---|---:|
+| 印刷 | 対応 |
+| 保存 | MD / TXT |
+`;
+
+/* =========================================================
+   HTML表示とURLの安全対策
+   ========================================================= */
+
+// 入力文字列をHTMLとして解釈させないためにエスケープする。
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => {
+    const replacements = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    };
+
+    return replacements[character];
+  });
+}
+
+// リンク・画像に使うURLを確認し、危険なスキームを拒否する。
+function getSafeUrl(value) {
+  const url = String(value).trim();
+  const compactUrl = url.replace(/[\u0000-\u0020\u007f\\]/g, "").toLowerCase();
+
+  if (/^(javascript|data|vbscript):/.test(compactUrl)) {
+    return null;
+  }
+
+  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(url);
+  const allowedScheme = /^(https?:|mailto:|tel:)/i.test(url);
+
+  if (hasScheme && !allowedScheme) {
+    return null;
+  }
+
+  if (compactUrl.startsWith("//")) {
+    return null;
+  }
+
+  return url;
+}
+
+/* =========================================================
+   インラインMarkdown
+   太字・斜体・取り消し線・リンク・画像・コード
+   ========================================================= */
+
+function renderInline(rawText) {
+  let text = String(rawText);
+  const protectedHtml = [];
+
+  // 変換済みHTMLを一時的な目印に置き換えて保護する。
+  function protect(html) {
+    const index = protectedHtml.push(html) - 1;
+    return `\uE000${index}\uE001`;
+  }
+
+  // インラインコードは中のMarkdown記号を変換しない。
+  text = text.replace(/`([^`]+)`/g, (match, code) => {
+    return protect(`<code>${escapeHtml(code)}</code>`);
+  });
+
+  // 画像を変換する。
+  text = text.replace(
+    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g,
+    (match, altText, rawUrl, title) => {
+      const safeUrl = getSafeUrl(rawUrl);
+
+      if (!safeUrl) {
+        return escapeHtml(altText);
+      }
+
+      const titleAttribute = title
+        ? ` title="${escapeHtml(title)}"`
+        : "";
+
+      return protect(
+        `<img src="${escapeHtml(safeUrl)}" ` +
+        `alt="${escapeHtml(altText)}"${titleAttribute}>`
+      );
+    }
+  );
+
+  // リンクを変換する。
+  text = text.replace(
+    /\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g,
+    (match, label, rawUrl, title) => {
+      const safeUrl = getSafeUrl(rawUrl);
+
+      if (!safeUrl) {
+        return escapeHtml(label);
+      }
+
+      const titleAttribute = title
+        ? ` title="${escapeHtml(title)}"`
+        : "";
+
+      return protect(
+        `<a href="${escapeHtml(safeUrl)}"${titleAttribute}>` +
+        `${renderInline(label)}</a>`
+      );
+    }
+  );
+
+  // それ以外の文字列をHTMLとして安全な形にする。
+  text = escapeHtml(text);
+
+  // 太字を先に処理し、その後で斜体を処理する。
+  text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  text = text.replace(/__(.+?)__/g, "<strong>$1</strong>");
+
+  // 取り消し線。
+  text = text.replace(/~~(.+?)~~/g, "<del>$1</del>");
+
+  // アスタリスク・アンダースコアの斜体。
+  // 2文字以上の強調記号に誤反応しないよう、太字処理の後に行う。
+  text = text.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>");
+  text = text.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, "$1<em>$2</em>");
+
+  // 先に保護しておいたコード・リンク・画像を戻す。
+  return text.replace(/\uE000(\d+)\uE001/g, (match, index) => {
+    return protectedHtml[Number(index)] || "";
+  });
+}
+
+/* =========================================================
+   表Markdown
+   ========================================================= */
+
+// 表の1行をセルごとに分割する。\| はセル区切りとして扱わない。
+function splitTableRow(line) {
+  let row = line.trim().replace(/^\|/, "");
+
+  if (row.endsWith("|") && !row.endsWith("\\|")) {
+    row = row.slice(0, -1);
+  }
+
+  const cells = [];
+  let currentCell = "";
+
+  for (let index = 0; index < row.length; index += 1) {
+    const character = row[index];
+
+    if (character === "\\" && row[index + 1] === "|") {
+      currentCell += "|";
+      index += 1;
+    } else if (character === "|") {
+      cells.push(currentCell.trim());
+      currentCell = "";
+    } else {
+      currentCell += character;
+    }
+  }
+
+  cells.push(currentCell.trim());
+  return cells;
+}
+
+// 表の区切り行は、各セルが --- / :--- / ---: / :---: のいずれか。
+function isTableSeparator(line) {
+  if (!line || !line.includes("|")) {
+    return false;
+  }
+
+  return splitTableRow(line).every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function getTableAlignment(separatorCell) {
+  const startsWithColon = separatorCell.startsWith(":");
+  const endsWithColon = separatorCell.endsWith(":");
+
+  if (startsWithColon && endsWithColon) return "center";
+  if (endsWithColon) return "right";
+  if (startsWithColon) return "left";
+  return "";
+}
+
+function isTableStart(lines, index) {
+  if (index + 1 >= lines.length || !lines[index].includes("|")) {
+    return false;
+  }
+
+  if (!isTableSeparator(lines[index + 1])) {
+    return false;
+  }
+
+  return splitTableRow(lines[index]).length === splitTableRow(lines[index + 1]).length;
+}
+
+/* =========================================================
+   ブロックMarkdown
+   見出し・コードブロック・リスト・引用・段落・表
+   ========================================================= */
+
+// 箇条書きまたは番号付きリストの情報を返す。
+function getListInfo(line) {
+  const match = line.match(/^( *)([-+*•]|\d+[.)])[ \t]+(.*)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    indent: match[1].length,
+    ordered: /^\d/.test(match[2]),
+    marker: match[2],
+    content: match[3],
+    start: /^\d/.test(match[2]) ? Number.parseInt(match[2], 10) : 1
+  };
+}
+
+// コードフェンスの開始行を解析する。
+function getFenceInfo(line) {
+  const match = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    marker: match[1][0],
+    length: match[1].length,
+    language: match[2].trim().split(/[ \t]+/)[0] || ""
+  };
+}
+
+// 行が新しいブロック要素の開始かを確認する。
+function isBlockStart(lines, index) {
+  const line = lines[index] || "";
+
+  if (!line.trim()) return true;
+  if (getFenceInfo(line)) return true;
+  if (/^ {0,3}#{1,6}(?:[ \t]+|(?=\S))/.test(line)) return true;
+  if (/^ {0,3}>/.test(line)) return true;
+  if (/^ {0,3}(?:-{3,}|_{3,}|\*(?:[ \t]*\*){2,})[ \t]*$/.test(line)) return true;
+  if (getListInfo(line)) return true;
+  if (isTableStart(lines, index)) return true;
+
+  return false;
+}
+
+function renderBlocks(markdown) {
+  const lines = String(markdown).replace(/\r\n?/g, "\n").split("\n");
+  const output = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+
+    // 空行は飛ばす。
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+
+    /* ---------- コードブロック ---------- */
+    const fenceInfo = getFenceInfo(line);
+
+    if (fenceInfo) {
+      const codeLines = [];
+      index += 1;
+
+      // 閉じる記号は開始と同じ種類で、長さが同じ以上の場合に認識する。
+      while (index < lines.length) {
+        const closingMatch = lines[index].match(/^ {0,3}(`+|~+)[ \t]*$/);
+        const isClosingFence =
+          closingMatch &&
+          closingMatch[1][0] === fenceInfo.marker &&
+          closingMatch[1].length >= fenceInfo.length;
+
+        if (isClosingFence) {
+          break;
+        }
+
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+
+      // 閉じフェンスが存在する場合だけ、その行を読み飛ばす。
+      if (index < lines.length) {
+        index += 1;
+      }
+
+      const languageAttribute = fenceInfo.language
+        ? ` class="language-${escapeHtml(fenceInfo.language)}"`
+        : "";
+
+      output.push(
+        `<pre><code${languageAttribute}>` +
+        `${escapeHtml(codeLines.join("\n"))}</code></pre>`
+      );
+
+      continue;
+    }
+
+    /* ---------- 見出し ---------- */
+    // `# 見出し` のほか、`#見出し` も見出しとして扱う。
+    const headingMatch = line.match(/^ {0,3}(#{1,6})[ \t]*(.*?)[ \t]*#*[ \t]*$/);
+
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const headingText = renderInline(headingMatch[2]);
+      output.push(`<h${level}>${headingText}</h${level}>`);
+      index += 1;
+      continue;
+    }
+
+    /* ---------- 水平線 ---------- */
+    if (/^ {0,3}(?:-{3,}|_{3,}|\*(?:[ \t]*\*){2,})[ \t]*$/.test(line)) {
+      output.push("<hr>");
+      index += 1;
+      continue;
+    }
+
+    /* ---------- 表 ---------- */
+    if (isTableStart(lines, index)) {
+      const headers = splitTableRow(lines[index]);
+      const separators = splitTableRow(lines[index + 1]);
+      const alignments = separators.map(getTableAlignment);
+      const table = ["<table><thead><tr>"];
+
+      headers.forEach((header, cellIndex) => {
+        const alignment = alignments[cellIndex];
+        const style = alignment ? ` style="text-align:${alignment}"` : "";
+        table.push(`<th${style}>${renderInline(header)}</th>`);
+      });
+
+      table.push("</tr></thead><tbody>");
+      index += 2;
+
+      while (index < lines.length && lines[index].trim() && lines[index].includes("|")) {
+        const cells = splitTableRow(lines[index]);
+        table.push("<tr>");
+
+        headers.forEach((header, cellIndex) => {
+          const alignment = alignments[cellIndex];
+          const style = alignment ? ` style="text-align:${alignment}"` : "";
+          table.push(`<td${style}>${renderInline(cells[cellIndex] || "")}</td>`);
+        });
+
+        table.push("</tr>");
+        index += 1;
+      }
+
+      table.push("</tbody></table>");
+      output.push(table.join(""));
+      continue;
+    }
+
+    /* ---------- 引用 ---------- */
+    if (/^ {0,3}>/.test(line)) {
+      const quoteLines = [];
+
+      while (index < lines.length && /^ {0,3}>/.test(lines[index])) {
+        quoteLines.push(lines[index].replace(/^ {0,3}>[ \t]?/, ""));
+        index += 1;
+      }
+
+      output.push(`<blockquote>${renderBlocks(quoteLines.join("\n"))}</blockquote>`);
+      continue;
+    }
+
+    /* ---------- 箇条書き・番号付きリスト ---------- */
+    const firstListItem = getListInfo(line);
+
+    if (firstListItem) {
+      const items = [];
+      let cursor = index;
+
+      while (cursor < lines.length) {
+        const item = getListInfo(lines[cursor]);
+
+        if (
+          !item ||
+          item.indent !== firstListItem.indent ||
+          item.ordered !== firstListItem.ordered
+        ) {
+          break;
+        }
+
+        let itemContent = item.content;
+        const taskMatch = itemContent.match(/^\[([ xX])\][ \t]+(.*)$/);
+
+        if (taskMatch) {
+          const checked = taskMatch[1].toLowerCase() === "x" ? " checked" : "";
+          itemContent =
+            `<input type="checkbox" disabled${checked}> ` +
+            renderInline(taskMatch[2]);
+        } else {
+          itemContent = renderInline(itemContent);
+        }
+
+        items.push(`<li>${itemContent}</li>`);
+        cursor += 1;
+      }
+
+      const tagName = firstListItem.ordered ? "ol" : "ul";
+      const startAttribute =
+        firstListItem.ordered && firstListItem.start !== 1
+          ? ` start="${firstListItem.start}"`
+          : "";
+
+      output.push(`<${tagName}${startAttribute}>${items.join("")}</${tagName}>`);
+      index = cursor;
+      continue;
+    }
+
+    /* ---------- 段落 ---------- */
+    const paragraphLines = [line];
+    index += 1;
+
+    while (index < lines.length && !isBlockStart(lines, index)) {
+      paragraphLines.push(lines[index]);
+      index += 1;
+    }
+
+    output.push(`<p>${paragraphLines.map(renderInline).join("<br>")}</p>`);
+  }
+
+  return output.join("\n");
+}
+
+/* =========================================================
+   文字数
+   改行とMarkdownの記号を含めず、プレビュー上の文字を数える
+   ========================================================= */
+
+function countCharacters(text) {
+  const normalized = String(text).replace(/[\r\n]/g, "");
+
+  if (typeof Intl !== "undefined" && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter("ja", { granularity: "grapheme" });
+    return [...segmenter.segment(normalized)].length;
+  }
+
+  return Array.from(normalized).length;
+}
+
+function render() {
+  previewEl.innerHTML = renderBlocks(sourceEl.value);
+  const visibleText = previewEl.textContent || "";
+  countsEl.textContent = `${countCharacters(visibleText).toLocaleString()} 文字`;
+}
+
+/* =========================================================
+   ファイル保存・読み込み
+   ========================================================= */
+
+function downloadFile(fileName, contents, mimeType) {
+  const blob = new Blob([contents], { type: `${mimeType};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function saveMarkdown() {
+  downloadFile(`${currentBaseName}.md`, sourceEl.value, "text/markdown");
+}
+
+function saveText() {
+  downloadFile(
+    `${currentBaseName}.txt`,
+    previewEl.innerText.replace(/\n{3,}/g, "\n\n"),
+    "text/plain"
+  );
+}
+
+async function loadFile(file) {
+  if (!file) return;
+
+  try {
+    sourceEl.value = await file.text();
+    currentBaseName = file.name.replace(/\.[^.]+$/, "") || "document";
+    render();
+  } catch (error) {
+    alert("ファイルを読み込めませんでした。");
+    console.error(error);
+  }
+}
+
+/* =========================================================
+   イベント設定
+   ========================================================= */
+
+sourceEl.addEventListener("input", render);
+
+fileInputEl.addEventListener("change", (event) => {
+  loadFile(event.target.files && event.target.files[0]);
+  event.target.value = "";
+});
+
+document.getElementById("saveMd").addEventListener("click", saveMarkdown);
+document.getElementById("saveTxt").addEventListener("click", saveText);
+document.getElementById("printBtn").addEventListener("click", () => window.print());
+
+// Tabキーでフォーカスを移動せず、入力欄に半角スペース2つを挿入する。
+sourceEl.addEventListener("keydown", (event) => {
+  if (event.key !== "Tab") return;
+
+  event.preventDefault();
+  sourceEl.setRangeText("  ", sourceEl.selectionStart, sourceEl.selectionEnd, "end");
+  render();
+});
+
+/* =========================================================
+   画面全体へのドラッグ＆ドロップ
+   ========================================================= */
+
+function containsFiles(event) {
+  return event.dataTransfer && Array.from(event.dataTransfer.types || []).includes("Files");
+}
+
+document.addEventListener("dragenter", (event) => {
+  if (!containsFiles(event)) return;
+  event.preventDefault();
+  dragCounter += 1;
+  dropOverlayEl.classList.add("show");
+});
+
+document.addEventListener("dragover", (event) => {
+  if (containsFiles(event)) event.preventDefault();
+});
+
+document.addEventListener("dragleave", (event) => {
+  if (!containsFiles(event)) return;
+  event.preventDefault();
+  dragCounter = Math.max(0, dragCounter - 1);
+
+  if (dragCounter === 0) {
+    dropOverlayEl.classList.remove("show");
+  }
+});
+
+document.addEventListener("drop", (event) => {
+  event.preventDefault();
+  dragCounter = 0;
+  dropOverlayEl.classList.remove("show");
+
+  const files = Array.from(event.dataTransfer?.files || []);
+  const file = files.find((item) =>
+    /\.(md|markdown|txt)$/i.test(item.name) ||
+    item.type === "text/markdown" ||
+    item.type === "text/plain"
+  );
+
+  if (file) loadFile(file);
+});
+
+/* =========================================================
+   初期表示
+   ========================================================= */
+
+sourceEl.value = sampleMarkdown;
+render();
+</script>
+</body>
+</html>
