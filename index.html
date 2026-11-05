@@ -7,35 +7,74 @@
     <meta name="description" content="仮のホームページです。" />
 
     <!-- OGP -->
-    <meta property="og:title" content="My HP" />
+    <meta property="og:title" content="山住 虎太郎" />
     <meta property="og:description" content="仮のホームページです。" />
-    <meta property="og:image" content="assets/og.png" />
     <meta property="og:type" content="website" />
-
+    
     <link rel="icon" href="assets/avatar.jpg" />
-    <link rel="stylesheet" href="./styles.css">
+
+    <style>
+      :root {
+        --bg: #0b1220;
+        --card: rgba(255, 255, 255, 0.08);
+        --border: rgba(255, 255, 255, 0.12);
+        --text: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.65);
+        --shadow: 0 16px 50px rgba(0, 0, 0, 0.35);
+        --radius: 18px;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, Arial, sans-serif;
+        background:
+          radial-gradient(900px 600px at 20% 10%, rgba(90, 213, 215, 0.18), transparent 60%),
+          radial-gradient(800px 600px at 80% 30%, rgba(170, 120, 255, 0.14), transparent 60%),
+          radial-gradient(800px 700px at 50% 100%, rgba(255, 180, 120, 0.10), transparent 60%),
+          var(--bg);
+      }
+      .wrap { max-width: 720px; margin: 0 auto; padding: 32px 18px; display: grid; place-items: center; min-height: 100dvh; }
+      .card { width: 100%; padding: 40px 22px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); backdrop-filter: blur(10px); text-align: center; }
+      .avatar { width: 80px; height: 80px; border-radius: 999px; object-fit: cover; border: 1px solid var(--border); margin: 0 auto 16px; display: block; }
+      .title { font-size: 1.35rem; margin: 0; letter-spacing: 0.02em; }
+      .subtitle { margin: 4px 0 32px; color: var(--muted); font-size: 0.95rem; }
+      .links { display: grid; gap: 10px; }
+      .link-btn { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px 14px; border-radius: 14px; text-decoration: none; color: var(--text); border: 1px solid var(--border); background: rgba(255, 255, 255, 0.06); transition: transform 120ms ease, background 120ms ease, border-color 120ms ease; }
+      .link-btn:hover { transform: translateY(-1px); background: rgba(255, 255, 255, 0.10); border-color: rgba(255, 255, 255, 0.22); }
+      .link-left { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+      .badge { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; background: rgba(90, 213, 215, 0.16); border: 1px solid rgba(90, 213, 215, 0.22); }
+      .link-text { display: grid; gap: 2px; min-width: 0; }
+      .link-title { font-weight: 650; font-size: 1.1rem; }
+      .footer { margin-top: 40px; color: var(--muted); text-align: center; }
+    </style>
   </head>
   <body>
     <main class="wrap">
       <section class="card">
-        <header class="header">
-          <img class="avatar" src="assets/avatar.jpg" alt="アイコン" />
-          <div class="title-area">
-            <h1 class="title">山住 虎太郎</h1>
-            <p class="subtitle">自作ツールのリンク集</p>
-          </div>
-        </header>
-
-        <div class="links" id="links" aria-label="リンク一覧">
-          <!-- JSでリンクボタン生成 -->
+        <img class="avatar" src="assets/avatar.jpg" alt="アイコン" />
+        <h1 class="title">山住 虎太郎</h1>
+        <p class="subtitle">Personal Portal</p>
+        
+        <div class="links">
+          <a href="./tools/" class="link-btn">
+            <span class="link-left">
+              <span class="badge" aria-hidden="true">🛠️</span>
+              <span class="link-text">
+                <span class="link-title">自作ツール一覧 (Tools)</span>
+              </span>
+            </span>
+          </a>
         </div>
 
         <footer class="footer">
-          <small>© <span id="year"></span>Kotarou Yamazumi</small>
+          <small>© <span id="year"></span> Kotarou Yamazumi</small>
         </footer>
       </section>
     </main>
-
-    <script src="script.js"></script>
+    <script>
+      document.getElementById("year").textContent = String(new Date().getFullYear());
+    </script>
   </body>
 </html>
