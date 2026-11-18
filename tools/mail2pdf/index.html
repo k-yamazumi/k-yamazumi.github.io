@@ -1,1 +1,994 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>メール一括PDF変換</title>
 
+    <!-- =========================================
+         ライブラリ
+         ※ 読み込めなかった場合は onerror でアラートを出す
+    ========================================= -->
+    <script src="./html2pdf.bundle.min.js"
+            onerror="alert('html2pdf.bundle.min.js が同じフォルダに見つかりません。')"></script>
+    <script type="module">
+        import PostalMime from './postal-mime.js';
+        window.PostalMime = PostalMime;
+    </script>
+    <script src="./DataStream.js"
+            onerror="alert('DataStream.js が同じフォルダに見つかりません。')"></script>
+    <script src="./msg.reader.js"
+            onerror="alert('msg.reader.js が同じフォルダに見つかりません。')"></script>
+
+    <style>
+        /* =========================================
+           UI用CSS
+        ========================================= */
+        :root {
+            --primary: #005a9e;
+            --bg: #f3f2f1;
+            --surface: #ffffff;
+            --border: #e1dfdd;
+            --text-main: #323130;
+            --text-sub: #605e5c;
+        }
+
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--surface);
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        h1 { margin-top: 0; font-size: 1.5rem; color: var(--primary); }
+
+        /* 表示/非表示の切り替えに使う共通クラス */
+        .hidden { display: none !important; }
+
+        /* ---------- ドラッグ＆ドロップエリア ---------- */
+        .drop-area {
+            border: 2px dashed #0078d4;
+            background-color: #f3f9fd;
+            padding: 60px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        /* ドラッグ中の色（赤系） */
+        .drop-area.hover {
+            border-color: #d32f2f;
+            background-color: #ffebee;
+        }
+        .drop-area p { margin: 0; font-size: 1.1rem; color: #0078d4; }
+
+        /* ---------- 設定エリア ---------- */
+        .settings-area {
+            display: flex;
+            gap: 20px;
+            padding: 15px;
+            background: var(--bg);
+            border-radius: 6px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        /* ---------- リセットボタン ---------- */
+        .reset-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 8px;
+        }
+        .btn-reset {
+            background: #fff;
+            color: #d13438;
+            border: 1px solid #d13438;
+            padding: 4px 10px;
+            font-size: 0.85rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-reset:hover { background: #fde7e9; }
+
+        /* ---------- メール一覧（幅は固定、高さを超えたらスクロール） ---------- */
+        .list-area {
+            margin-bottom: 20px;
+            width: 100%;
+            box-sizing: border-box;
+            height: 360px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+        .analyze-box { padding: 15px; color: #666; }
+        .list-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .list-item:last-child { border-bottom: none; }
+        .list-item.error { color: #d13438; background: #fde7e9; }
+        .list-subject { font-weight: bold; }
+        .list-date { color: var(--text-sub); font-size: 0.9rem; }
+
+        /* ---------- PDF作成エリア ---------- */
+        .action-area {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+        }
+        .action-area input[type="text"] {
+            padding: 8px;
+            font-size: 1rem;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            width: 200px;
+        }
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-primary:hover { background-color: #004578; }
+        .btn-primary:disabled { background-color: #c8c6c4; cursor: not-allowed; }
+
+        /* ---------- プログレスバー ---------- */
+        .progress-container {
+            display: none;
+            width: 100%;
+            height: 8px;
+            background-color: var(--border);
+            border-radius: 4px;
+            margin-top: 15px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background-color: #107c41;
+            transition: width 0.3s;
+        }
+
+        /* =========================================
+           画面2：PDF作成表示（全画面）
+           ※ 上部バーと進捗バーはPDFに含まない
+        ========================================= */
+        #pdf-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow-y: auto;
+            background: #525659;
+            z-index: 100;
+            padding-bottom: 40px;
+        }
+        .pdf-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            background: #323130;
+            color: #fff;
+        }
+        #progress-text { flex: 1; color: #fff; font-size: 0.9rem; }
+        #pdf-screen .progress-container { margin: 0; border-radius: 0; }
+
+        .btn-home {
+            background: #fff;
+            color: var(--primary);
+            border: 1px solid #fff;
+            padding: 6px 14px;
+            font-size: 0.9rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-home:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* PDFに写る部分（この中だけがPDFになる） */
+        #pdf-render-container {
+            width: 800px;
+            margin: 20px auto;
+            background: #fff;
+        }
+
+        /* 1メール分のページ */
+        .pdf-page {
+            padding: 30px;
+            background: #fff;
+            color: #000;
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+        }
+        .pdf-header {
+            border-bottom: 2px solid #ccc;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        .pdf-subject { font-size: 1.5rem; font-weight: bold; margin-bottom: 12px; }
+
+        /* 送信者・宛先・日時：ラベル列を固定幅にし、値が折り返しても列を揃える */
+        .pdf-meta { font-size: 0.95rem; color: #444; line-height: 1.6; }
+        .pdf-meta .meta-row {
+            display: grid;
+            grid-template-columns: 60px 1fr;
+            column-gap: 8px;
+            align-items: start;
+        }
+        .pdf-meta .meta-label { color: #777; }
+        .pdf-meta .meta-value { word-break: break-all; }
+
+        .pdf-body { font-size: 1rem; line-height: 1.5; overflow-wrap: break-word; }
+        .pdf-body p, .pdf-body div { margin: 0 0 0.4em 0; padding: 0; line-height: 1.5; }
+        .pdf-body img { max-width: 100%; height: auto; }
+
+        .pdf-attachments {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px dashed #ccc;
+            font-size: 0.9rem;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+
+<!-- =========================================
+     画面1：読み込み・設定画面
+========================================= -->
+<div class="container" id="main-screen">
+    <h1>メール一括PDF変換</h1>
+
+    <!-- 1. ドラッグ＆ドロップエリア（クリックでも選択可能） -->
+    <div class="drop-area" id="drop-area">
+        <p>ここに EML / MSG ファイルをドロップ</p>
+        <p style="font-size: 0.9rem; color: #888; margin-top: 5px;">(クリックして選択も可能)</p>
+    </div>
+    <!-- 実体のinputは非表示にし、ドロップエリアのクリックから開く -->
+    <input type="file" id="file-input" multiple accept=".eml,.msg" style="display:none;">
+
+    <!-- 2. 設定エリア（ドロップエリアの下） -->
+    <div class="settings-area">
+        <label>
+            <input type="checkbox" id="setting-image" checked>
+            メール内の画像を表示する
+        </label>
+        <label>
+            並び順:
+            <select id="setting-sort">
+                <option value="asc">受信日時が古い順（昇順）</option>
+                <option value="desc" selected>受信日時が新しい順（降順）</option>
+            </select>
+        </label>
+    </div>
+
+    <!-- 3. リセットボタン（読み込み後に表示） -->
+    <div class="reset-row hidden" id="reset-row">
+        <button id="btn-reset" class="btn-reset">読み込みをリセット</button>
+    </div>
+
+    <!-- 4. メール一覧（読み込み後に表示・高さ固定でスクロール） -->
+    <div class="list-area hidden" id="list-area"></div>
+
+    <!-- 5. PDF作成・保存エリア -->
+    <div class="action-area">
+        <input type="text" id="pdf-filename" placeholder="出力ファイル名" value="MailArchive">
+        <span>.pdf</span>
+        <button id="btn-create" class="btn-primary" disabled>PDFを作成</button>
+    </div>
+</div>
+
+<!-- =========================================
+     画面2：PDF作成表示（全画面・PDF作成時のみ表示）
+========================================= -->
+<div id="pdf-screen" style="display:none;">
+    <!-- 上部バー（PDFには含まない） -->
+    <div class="pdf-topbar">
+        <button id="btn-home" class="btn-home">← ホームに戻る</button>
+        <div id="progress-text">処理中...</div>
+    </div>
+    <!-- 進捗バー（PDFには含まない） -->
+    <div class="progress-container" id="progress-container">
+        <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <!-- PDFに写る部分（この中だけがPDFになる） -->
+    <div id="pdf-render-container"></div>
+</div>
+
+<script>
+    // =========================================
+    // 状態の保持
+    // =========================================
+    let parsedEmails = [];   // 読み込めたメール
+    let errorFiles = [];     // 読み込みに失敗したファイル
+
+    // =========================================
+    // DOM要素の取得
+    // =========================================
+    const mainScreen = document.getElementById('main-screen');
+    const pdfScreen = document.getElementById('pdf-screen');
+    const dropArea = document.getElementById('drop-area');
+    const fileInput = document.getElementById('file-input');
+    const settingImage = document.getElementById('setting-image');
+    const settingSort = document.getElementById('setting-sort');
+    const resetRow = document.getElementById('reset-row');
+    const btnReset = document.getElementById('btn-reset');
+    const listArea = document.getElementById('list-area');
+    const pdfFilename = document.getElementById('pdf-filename');
+    const btnCreate = document.getElementById('btn-create');
+    const btnHome = document.getElementById('btn-home');
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const renderContainer = document.getElementById('pdf-render-container');
+
+    // =========================================
+    // イベントリスナー
+    // =========================================
+    // ブラウザ全体へのドロップで、ファイルが開いてしまうのを防ぐ
+    window.addEventListener('dragover', e => e.preventDefault());
+    window.addEventListener('drop', e => e.preventDefault());
+
+    // クリックでファイル選択
+    dropArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => {
+        if (e.target.files.length > 0) handleFiles(e.target.files);
+    });
+
+    // ドラッグ＆ドロップ（ドラッグ中は色を変える）
+    dropArea.addEventListener('dragover', e => {
+        e.preventDefault();
+        dropArea.classList.add('hover');
+    });
+    dropArea.addEventListener('dragleave', () => dropArea.classList.remove('hover'));
+    dropArea.addEventListener('drop', e => {
+        e.preventDefault();
+        dropArea.classList.remove('hover');
+        if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+            handleFiles(e.dataTransfer.files);
+        }
+    });
+
+    // 並び順を変えたら一覧を再描画
+    settingSort.addEventListener('change', renderList);
+
+    // リセット・ホームに戻る・PDF作成
+    btnReset.addEventListener('click', resetAll);
+    btnHome.addEventListener('click', resetAll);
+    btnCreate.addEventListener('click', generatePDF);
+
+    // =========================================
+    // ファイル読み込み（進捗表示つき）
+    // =========================================
+    async function handleFiles(fileList) {
+        const files = Array.from(fileList);
+        if (files.length === 0) return;
+        const total = files.length;
+
+        // 読み込みを始めたタイミングで一覧とリセットボタンを表示
+        listArea.classList.remove('hidden');
+        resetRow.classList.remove('hidden');
+        btnCreate.disabled = true;
+
+        // 進捗表示（件数テキスト＋進捗バー）
+        listArea.innerHTML = `
+            <div class="analyze-box">
+                <div id="analyze-text">解析中... (0/${total})</div>
+                <div class="progress-container" style="display:block; margin-top:8px;">
+                    <div class="progress-bar" id="analyze-bar"></div>
+                </div>
+            </div>`;
+        const analyzeText = document.getElementById('analyze-text');
+        const analyzeBar = document.getElementById('analyze-bar');
+
+        for (let i = 0; i < total; i++) {
+            const file = files[i];
+
+            // 何件目を処理中かを表示し、バーを進める
+            analyzeText.textContent = `解析中... (${i + 1}/${total}) ${file.name}`;
+            analyzeBar.style.width = `${(i / total) * 100}%`;
+
+            // 表示を更新させるため、処理を一度譲る
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            try {
+                const ext = file.name.split('.').pop().toLowerCase();
+                let email;
+                if (ext === 'eml') {
+                    email = await parseEml(file);
+                } else if (ext === 'msg') {
+                    email = await parseMsg(file);
+                } else {
+                    throw new Error('未対応のファイル形式です (.eml / .msg のみ対応)');
+                }
+                parsedEmails.push(email);
+            } catch (err) {
+                // 失敗したファイルは飛ばして、最後に一覧で表示
+                console.error(`[${file.name}] の読み込みエラー:`, err);
+                errorFiles.push({ name: file.name, reason: err.message || String(err) });
+            }
+        }
+
+        analyzeBar.style.width = '100%';
+        renderList();
+        btnCreate.disabled = parsedEmails.length === 0;
+
+        // 同じファイルを再度選べるようにリセット
+        fileInput.value = '';
+    }
+
+    // ---------------------------------------------
+    // 宛先（To / Cc）の解析
+    // ---------------------------------------------
+
+    // ヘッダーの値を取り出す（折り返し行は1行につなぐ）
+    function getHeaderValue(headers, key) {
+        const lines = headers.split(/\r?\n/);
+        const values = [];
+        lines.forEach((line, i) => {
+            if (!line.startsWith(key)) return;
+            let value = line.slice(key.length);
+            // 次の行が空白で始まる場合は、折り返された続きとして連結する
+            for (let j = i + 1; j < lines.length && /^[ \t]/.test(lines[j]); j++) {
+                value += ' ' + lines[j].trim();
+            }
+            values.push(value.trim());
+        });
+        return values.join(', ');
+    }
+
+    // 符号化された名前（=?charset?B?...?= / =?charset?Q?...?=）を日本語に戻す
+    function decodeMimeWords(text) {
+        // 符号化単語どうしの間の空白は表示しない（RFC 2047の仕様）
+        const joined = text.replace(/\?=\s+=\?/g, '?==?');
+
+        return joined.replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, (whole, charset, enc, body) => {
+            try {
+                let bytes;
+                if (enc.toUpperCase() === 'B') {
+                    // B形式: Base64 で符号化されている
+                    const bin = atob(body);
+                    bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+                } else {
+                    // Q形式: _ は空白、=XX は16進数1バイト
+                    const arr = [];
+                    for (let i = 0; i < body.length; i++) {
+                        const hex = body.substr(i + 1, 2);
+                        if (body[i] === '=' && /^[0-9A-Fa-f]{2}$/.test(hex)) {
+                            arr.push(parseInt(hex, 16));
+                            i += 2;
+                        } else if (body[i] === '_') {
+                            arr.push(0x20);
+                        } else {
+                            arr.push(body.charCodeAt(i));
+                        }
+                    }
+                    bytes = Uint8Array.from(arr);
+                }
+                return new TextDecoder(charset).decode(bytes);
+            } catch (e) {
+                return whole; // 復号できない場合は元の文字列のまま
+            }
+        });
+    }
+
+    // 「名前 <アドレス>, アドレスのみ」の宛先一覧を { name, email } の配列にする
+    function parseAddressList(value) {
+        if (!value) return [];
+        return value.split(',').map(part => {
+            const t = part.trim();
+            if (!t) return null;
+
+            const m = t.match(/<([^>]+)>/);
+            const email = m ? m[1].trim() : t;                     // <...> の中がアドレス
+            let name = m ? t.slice(0, m.index).trim() : '';         // <...> より前が名前
+            name = decodeMimeWords(name).replace(/^"|"$/g, '').trim(); // 引用符を外す
+            return { name: name, email: email };
+        }).filter(Boolean);
+    }
+
+    // 名前とアドレスから表示用の文字列を作る
+    // 両方ある場合は「名前 <アドレス>」、片方だけならそのまま表示
+    function formatAddr(name, email) {
+        const n = (name || '').trim();
+        const e = (email || '').trim();
+        if (n && e && n !== e) return `${n} <${e}>`;
+        return e || n;
+    }
+
+    // =========================================
+    // EML解析（postal-mime.js）
+    // =========================================
+    async function parseEml(file) {
+        if (typeof PostalMime === 'undefined') {
+            throw new Error('EML解析ライブラリ(postal-mime.js)が読み込まれていません');
+        }
+        const parser = new PostalMime();
+        // ArrayBufferで渡すと読み込みの失敗が少ない
+        const parsed = await parser.parse(await file.arrayBuffer());
+
+        // 送信者・宛先の表示用に整形
+        const formatAddress = (addrObj) => {
+            if (!addrObj) return '';
+            if (Array.isArray(addrObj)) return addrObj.map(a => formatAddr(a.name, a.address)).join(', ');
+            return formatAddr(addrObj.name, addrObj.address);
+        };
+
+        // 日時が無い・不正な場合は「日時不明」
+        const d = parsed.date ? new Date(parsed.date) : null;
+
+        return {
+            filename: file.name,
+            subject: parsed.subject || '(件名なし)',
+            date: (d && !isNaN(d)) ? d : new Date(0),
+            from: formatAddress(parsed.from) || '(不明)',
+            to: formatAddress(parsed.to),
+            bodyHtml: parsed.html || nl2br(escapeHtml(parsed.text || '')),
+            attachments: (parsed.attachments || []).map(a => a.filename || '不明なファイル')
+        };
+    }
+
+    // =========================================
+    // MSG解析（msg.reader.js）
+    // =========================================
+    function findDateHeader(headers) {
+        // ヘッダー文字列から「Date:」で始まる行の値を取り出す（正規表現を使わない版）
+        const KEY = 'Date:';
+        const lines = headers.split('\n');
+        for (const line of lines) {
+            const t = line.trim(); // 行末の \r もここで除去される
+            if (t.startsWith(KEY)) {
+                return t.slice(KEY.length).trim();
+            }
+        }
+        return null;
+    }
+
+    async function parseMsg(file) {
+        if (typeof MSGReader === 'undefined') {
+            throw new Error('MSG解析ライブラリ(msg.reader.js)が読み込まれていません');
+        }
+
+        // ファイルを読み込み、解析する
+        const arrayBuffer = await file.arrayBuffer();
+        // 画像（cid:）の取り出しに使うため、リーダーを保持する
+        const reader = new MSGReader(arrayBuffer);
+        const data = reader.getFileData();
+        if (data.error) throw new Error(data.error);
+
+        // 日時の優先順: 配信日時 → 送信日時 → ヘッダーの Date 行
+        // 取得できない場合は「日時不明」（1970年の日付）として扱う
+        let date = data.deliveryTime || data.clientSubmitTime || null;
+        if (!(date instanceof Date) || isNaN(date)) {
+            const dateText = findDateHeader(data.headers || '');
+            const d = dateText ? new Date(dateText) : null;
+            date = (d && !isNaN(d)) ? d : new Date(0);
+        }
+
+        // 送信者・宛先: 「名前 <アドレス>」形式（名前が無ければアドレスのみ）
+        // ヘッダーの From / To / Cc を、宛先と同じ方式（名前 <アドレス>）で作る
+        const headerText = data.headers || '';
+        const fromList = parseAddressList(getHeaderValue(headerText, 'From:'));
+        let toList = parseAddressList(getHeaderValue(headerText, 'To:'));
+        const ccList = parseAddressList(getHeaderValue(headerText, 'Cc:'));
+
+        // ヘッダーから取れなかった場合だけ、ライブラリの値を使う
+        if (toList.length === 0 && ccList.length === 0) {
+            toList = (data.recipients || []).map(r => ({ name: r.name, email: r.email }));
+        }
+
+        // 送信者は最初の1件を使う（通常は1人）
+        const from = fromList.length > 0
+            ? formatAddr(fromList[0].name, fromList[0].email)
+            : (formatAddr(data.senderName, data.senderEmail) || '(不明)');
+        const to = toList.map(a => formatAddr(a.name, a.email)).filter(Boolean).join(', ');
+        const cc = ccList.map(a => formatAddr(a.name, a.email)).filter(Boolean).join(', ');
+
+        // 添付ファイル: ファイル名のみ使用（本体は使わない）
+        const attachments = (data.attachments || [])
+            .map(a => a.fileName || a.fileNameShort || '不明なファイル');
+
+
+        // 本文の選択
+        const plainText = (data.body || '').replace(/\r\n?/g, '\n');
+        // 復号したHTMLの cid: 画像を埋め込んでから使う
+        const htmlStr = data.bodyHTML
+            ? embedCidImages(decodeHtmlBytes(data.bodyHTML), reader, data.attachments)
+            : '';
+        const htmlText = htmlStr
+            ? new DOMParser().parseFromString(htmlStr, 'text/html').body.textContent.trim()
+            : '';
+
+        let bodyHtml;
+        if (htmlText && !htmlStr.includes('\uFFFD')) {
+            bodyHtml = htmlStr;
+        } else if (plainText.trim()) {
+            bodyHtml = nl2br(escapeHtml(plainText));
+        } else {
+            bodyHtml = htmlStr || '<p>(本文なし)</p>';
+        }
+
+        return {
+            filename: file.name,
+            subject: data.subject || '(件名なし)',
+            date: date,
+            from: from,
+            to: to,
+            cc: cc,
+            bodyHtml: bodyHtml,
+            attachments: attachments
+        };
+    }
+
+    // HTML本文のデコード: まずUTF-8として厳密に読み、失敗したらShift_JISとして読む
+    function decodeHtmlBytes(bytes) {
+        // 1) 文字列で届いた場合
+        // ESC（0x1b）が残っていれば、まだ復号されていない ISO-2022-JP なので、
+        // 1文字を1バイトに戻してから ISO-2022-JP として復号する
+        if (typeof bytes === 'string') {
+            if (bytes.indexOf('\u001b') === -1) return bytes;
+            const raw = Uint8Array.from(bytes, c => c.charCodeAt(0) & 0xff);
+            return new TextDecoder('iso-2022-jp').decode(raw);
+        }
+
+        // 2) バイト列で届いた場合
+        // charset= の指定を、ASCII として読める windows-1252 で探す
+        const ascii = new TextDecoder('windows-1252').decode(bytes);
+        const m = ascii.match(/charset\s*=\s*​["']?\s*​([\w-]+)/i);
+
+        // 試す文字コードの順番
+        const candidates = [];
+        // ESC を含むなら ISO-2022-JP を最優先にする（UTF-8 でも誤って読めてしまうため）
+        if (bytes.indexOf(0x1b) !== -1) candidates.push('iso-2022-jp');
+        if (m) candidates.push(m[1]);
+        candidates.push('utf-8', 'shift_jis', 'iso-2022-jp', 'euc-jp');
+
+        for (const label of candidates) {
+            try {
+                return new TextDecoder(label, { fatal: true }).decode(bytes);
+            } catch (e) { /* 次の候補へ */ }
+        }
+        return new TextDecoder('shift_jis').decode(bytes);
+    }
+
+    // 添付のバイト列を、data: 形式で使える Base64 文字列にする
+    function bytesToBase64(bytes) {
+        let binary = '';
+        const chunk = 0x8000; // 一度に変換する量（大きすぎると例外になるため分割する）
+        for (let i = 0; i < bytes.length; i += chunk) {
+            // 値を 0〜255 に揃えてから文字にする
+            const part = Array.from(bytes.subarray(i, i + chunk), b => b & 0xff);
+            binary += String.fromCharCode.apply(null, part);
+        }
+        return btoa(binary);
+    }
+
+    // 文中の cid: 参照を、添付の画像を埋め込んだ data: 形式に置き換える
+    function embedCidImages(html, reader, attachments) {
+        if (!html || html.indexOf('cid:') === -1) return html;
+
+        // ライブラリの文字列には末尾に NUL（\u0000）が付くことがあるので取り除く
+        const clean = s => (s || '').replace(/\u0000/g, '').trim();
+
+        let result = html;
+        for (const att of attachments || []) {
+            const cid = clean(att.pidContentId);
+            if (!cid) continue; // 本文に埋め込まれていない添付は対象外
+
+            // 添付の中身を読み、画像として使える形にする
+            const bytes = reader.getAttachment(att).content;
+            if (!bytes || bytes.length === 0) continue;
+
+            const mime = clean(att.mimeType) || 'application/octet-stream';
+            const dataUrl = 'data:' + mime + ';base64,' + bytesToBase64(bytes);
+
+            // 「cid:」の後ろの番号を、正規表現の記号を無効にして探す
+            const escaped = cid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            result = result.replace(new RegExp('cid:' + escaped, 'gi'), dataUrl);
+        }
+        return result;
+    }
+
+    // =========================================
+    // 一覧表示
+    // =========================================
+    // 日時の表示用（取得できなかった場合は「日時不明」）
+    function formatDate(d) {
+        if (!d || d.getTime() === 0) return '日時不明';
+        return d.toLocaleString('ja-JP', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit'
+        });
+    }
+
+    function renderList() {
+        listArea.innerHTML = '';
+        if (parsedEmails.length === 0 && errorFiles.length === 0) return;
+
+        // 並び順（昇順・降順）
+        const sortOrder = settingSort.value;
+        parsedEmails.sort((a, b) => sortOrder === 'asc' ? a.date - b.date : b.date - a.date);
+
+        // 読み込めたメール
+        parsedEmails.forEach(email => {
+            const div = document.createElement('div');
+            div.className = 'list-item';
+            div.innerHTML = `
+                <div>
+                    <div class="list-subject">${escapeHtml(email.subject)}</div>
+                    <div class="list-date">送信者: ${escapeHtml(email.from)}</div>
+                </div>
+                <div class="list-date">${formatDate(email.date)}</div>`;
+            listArea.appendChild(div);
+        });
+
+        // 読み込みに失敗したファイルと理由
+        if (errorFiles.length > 0) {
+            const title = document.createElement('h3');
+            title.style.color = '#d13438';
+            title.style.margin = '20px 15px 10px';
+            title.textContent = '読み込みに失敗したファイル (スキップされました)';
+            listArea.appendChild(title);
+
+            errorFiles.forEach(err => {
+                const div = document.createElement('div');
+                div.className = 'list-item error';
+                div.innerHTML = `
+                    <div class="list-subject">${escapeHtml(err.name)}</div>
+                    <div class="list-date">理由: ${escapeHtml(err.reason)}</div>`;
+                listArea.appendChild(div);
+            });
+        }
+    }
+
+    // =========================================
+    // リセット・ホームに戻る（共通処理）
+    // =========================================
+    function resetAll() {
+        parsedEmails = [];
+        errorFiles = [];
+
+        // 読み込み画面を初期状態に戻す
+        listArea.innerHTML = '';
+        listArea.classList.add('hidden');
+        resetRow.classList.add('hidden');
+        btnCreate.disabled = true;
+        fileInput.value = '';
+
+        // PDF作成表示をクリアし、進捗も初期化
+        renderContainer.innerHTML = '';
+        progressContainer.style.display = 'none';
+        progressBar.style.width = '0%';
+        progressBar.style.backgroundColor = '#107c41';
+        progressText.textContent = '処理中...';
+
+        // 画面1へ戻す
+        pdfScreen.style.display = 'none';
+        mainScreen.style.display = 'block';
+        window.scrollTo(0, 0);
+    }
+
+    // =========================================
+    // PDF生成（メールごとに撮影し、1つのPDFに結合）
+    // =========================================
+    // 次の描画フレームまで待つ（レイアウト確定のため）
+    const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    // 画像の読み込み完了を待つ
+    function waitForImages(root) {
+        return Promise.all([...root.querySelectorAll('img')].map(img =>
+            img.complete ? Promise.resolve() : new Promise(res => { img.onload = res; img.onerror = res; })
+        ));
+    }
+
+    // メール本文のHTMLを整え、行間が不自然に広がるのを防ぐ
+    function normalizeBodyDom(doc) {
+        // (1) メール側のインライン余白・行間指定を取り除く（Outlook由来の margin / line-height など）
+        doc.querySelectorAll('[style]').forEach(el => {
+            ['margin', 'margin-top', 'margin-bottom', 'padding', 'line-height'].forEach(prop => {
+                el.style.removeProperty(prop);
+            });
+        });
+
+        // (2) 中身が空の段落（&nbsp; や改行だけのもの）は、高さを小さく固定した空白に置き換える
+        doc.querySelectorAll('p, div').forEach(el => {
+            const text = el.textContent.replace(/\u00a0/g, '').trim();
+            const hasMedia = el.querySelector('img, table');
+            if (text === '' && !hasMedia) {
+                const spacer = doc.createElement('div');
+                spacer.style.height = '0.8em';
+                el.replaceWith(spacer);
+            }
+        });
+    }
+
+    // 1メール分のページ要素を作成
+    function buildPageElement(email, showImage) {
+        const page = document.createElement('div');
+        page.className = 'pdf-page';
+
+        // 本文から危険なタグを除去
+        const doc = new DOMParser().parseFromString(email.bodyHtml, 'text/html');
+        doc.querySelectorAll('script, style, iframe').forEach(el => el.remove());
+        normalizeBodyDom(doc); // 本文の余白・行間を整える
+
+        // 画像の表示/非表示設定
+        if (!showImage) {
+            doc.querySelectorAll('img').forEach(img => {
+                const span = document.createElement('span');
+                span.textContent = ` [画像: ${img.alt || 'インライン画像'} 省略] `;
+                span.style.color = '#888';
+                span.style.fontSize = '0.9rem';
+                img.parentNode.replaceChild(span, img);
+            });
+        }
+
+        // 添付ファイルは名前のみ表示
+        let attachmentsHtml = '';
+        if (email.attachments && email.attachments.length > 0) {
+            const names = email.attachments.map(a => `📎 ${escapeHtml(a)}`).join('<br>');
+            attachmentsHtml = `
+                <div class="pdf-attachments">
+                    <strong>添付ファイル:</strong><br>
+                    ${names}
+                </div>`;
+        }
+
+        // CC無しのときは欄ごと表示しない
+        const ccRow = email.cc
+            ? `<div class="meta-row"><span class="meta-label">CC</span><span class="meta-value">${escapeHtml(email.cc)}</span></div>`
+            : '';
+
+        page.innerHTML = `
+            <div class="pdf-header">
+                <div class="pdf-subject">${escapeHtml(email.subject)}</div>
+                <div class="pdf-meta">
+                    <div class="meta-row"><span class="meta-label">送信者</span><span class="meta-value">${escapeHtml(email.from)}</span></div>
+                    <div class="meta-row"><span class="meta-label">宛先</span><span class="meta-value">${escapeHtml(email.to)}</span></div>
+                    ${ccRow}
+                    <div class="meta-row"><span class="meta-label">日時</span><span class="meta-value">${formatDate(email.date)}</span></div>
+                </div>
+            </div>
+            <div class="pdf-body">${doc.body.innerHTML}</div>
+            ${attachmentsHtml}`;
+        return page;
+    }
+
+    // 撮影したキャンバスをA4の高さで分割し、各スライスを新しいページとして追加する
+    function appendCanvasToPdf(pdf, canvas) {
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const ratio = pageW / canvas.width;        // キャンバスのpx → PDFのpt
+        const sliceH = Math.floor(pageH / ratio);  // 1ページに入るキャンバスのpx数
+
+        let y = 0;
+        while (y < canvas.height) {
+            const h = Math.min(sliceH, canvas.height - y);
+            const slice = document.createElement('canvas');
+            slice.width = canvas.width;
+            slice.height = h;
+            slice.getContext('2d').drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+            pdf.addPage();
+            pdf.addImage(slice.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, pageW, h * ratio);
+            y += h;
+        }
+    }
+
+    async function generatePDF() {
+        if (parsedEmails.length === 0) return;
+
+        if (typeof html2pdf === 'undefined') {
+            alert('PDF作成ライブラリ(html2pdf.bundle.min.js)が読み込めませんでした。');
+            return;
+        }
+
+        // 1. 全画面のPDF作成表示に切り替え
+        btnCreate.disabled = true;
+        btnHome.disabled = true;
+        mainScreen.style.display = 'none';
+        pdfScreen.style.display = 'block';
+        window.scrollTo(0, 0);
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressBar.style.backgroundColor = '#107c41';
+        progressText.textContent = 'PDFデザインを構築中...';
+
+        // 2. メールごとのページを表示エリアに並べる
+        renderContainer.innerHTML = '';
+        const showImage = settingImage.checked;
+        const pages = parsedEmails.map(email => buildPageElement(email, showImage));
+        pages.forEach(p => renderContainer.appendChild(p));
+        await nextFrame();
+        await waitForImages(renderContainer);
+
+        const inputName = document.getElementById('pdf-filename').value.trim() || 'MailArchive';
+        const filename = `${inputName}.pdf`;
+
+        const commonOpt = {
+            margin: 0,
+            image: { type: 'jpeg', quality: 0.95 },
+            html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff' },
+            jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' }
+        };
+
+        try {
+            // 空のPDFを作成（先頭に空白ページが1枚できるため、最後に削除する）
+            const emptyDiv = document.createElement('div');
+            emptyDiv.textContent = ' ';
+            const pdf = await html2pdf().set(commonOpt).from(emptyDiv).toPdf().get('pdf');
+
+            for (let i = 0; i < pages.length; i++) {
+                progressText.textContent = `PDF作成中... (${i + 1}/${pages.length})`;
+                progressBar.style.width = `${(i / pages.length) * 100}%`;
+                await nextFrame();
+
+                // 全メールを同じ方式で撮影し、A4の高さで分割して追加する
+                const canvas = await html2pdf().set(commonOpt).from(pages[i].cloneNode(true)).toCanvas().get('canvas');
+                appendCanvasToPdf(pdf, canvas);
+            }
+
+            // 先頭の空白ページを削除
+            if (pdf.getNumberOfPages() > 1) pdf.deletePage(1);
+
+            progressText.textContent = 'ダウンロード中...';
+            pdf.save(filename);
+            progressBar.style.width = '100%';
+            progressText.textContent = 'ダウンロードが完了しました！';
+        } catch (err) {
+            console.error(err);
+            progressBar.style.backgroundColor = '#d13438';
+            progressText.textContent = 'PDFの生成中にエラーが発生しました（F12のコンソールを確認）';
+        } finally {
+            // PDF作成表示は残し、「ホームに戻る」で戻れるようにする
+            btnHome.disabled = false;
+            btnCreate.disabled = false;
+        }
+    }
+
+
+    // =========================================
+    // ユーティリティ関数
+    // =========================================
+    // HTMLエスケープ（XSS対策）
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // 改行文字を <br> に変換
+    function nl2br(str) {
+        if (!str) return '';
+        return str.replace(/\n/g, '<br>');
+    }
+</script>
+</body>
+</html>
