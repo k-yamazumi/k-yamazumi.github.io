@@ -87,7 +87,7 @@
           // recipient specific
           '3001': 'name',
           '39fe': 'email',
-          
+
           // 以下、改変箇所
           '1009': 'bodyRtf', // RTF本文の読み取り用に追加（2026-11-18）
         },
@@ -388,6 +388,14 @@
     return fieldName !== 'body' || fieldTypeMapped !== 'binary';
   }
 
+  // 改変: 項目ごとに採用したサイズを記録する場所（画面やJSONに出ないよう、列挙されない隠しプロパティにする）
+  function getSizeMap(fields) {
+    if (!fields.__sizeMap) {
+      Object.defineProperty(fields, '__sizeMap', { value: {}, enumerable: false });
+    }
+    return fields.__sizeMap;
+  }
+
   function fieldsDataDocument(ds, msgData, documentProperty, fields) {
     var value = documentProperty.name.substring(12).toLowerCase();
     var fieldClass = value.substring(0, 4);
@@ -399,7 +407,13 @@
     if (fieldName) {
       var fieldValue = getFieldValue(ds, msgData, documentProperty, fieldTypeMapped);
 
-      if (isAddPropertyValue(fieldName, fieldTypeMapped)) {
+      // 改変: 同じ名前の項目が複数ある場合は、サイズの大きい方を採用する（2026-11-18）
+      // 元の処理は後から出た項目で上書きしていたため、小さい項目が残っていた
+      var sizeMap = getSizeMap(fields);
+      var prevSize = sizeMap[fieldName] === undefined ? -1 : sizeMap[fieldName];
+
+      if (isAddPropertyValue(fieldName, fieldTypeMapped) && documentProperty.sizeBlock >= prevSize) {
+        sizeMap[fieldName] = documentProperty.sizeBlock;
         fields[fieldName] = applyValueConverter(fieldName, fieldTypeMapped, fieldValue);
       }
     }
@@ -411,12 +425,33 @@
     }
   }
 
-  // todo: html body test
+  // 改変: HTML本文は、本文中の charset 指定に合わせて復号する（2026-11-18）
+  // 元の処理は常にUTF-8で復号していたため、iso-2022-jp などの本文が文字化けしていた
   function applyValueConverter(fieldName, fieldTypeMapped, fieldValue) {
     if (fieldTypeMapped === 'binary' && fieldName === 'bodyHTML') {
-      return convertUint8ArrayToString(fieldValue);
+      return decodeHtmlBytes(fieldValue);
     }
     return fieldValue
+  }
+
+  // 改変: HTML本文のバイト列を、先頭付近の charset 指定に従って文字列にする
+  function decodeHtmlBytes(bytes) {
+    // charset の指定は ASCII 文字なので、先頭2048バイトを1文字ずつ読んで探す
+    var head = '';
+    var n = Math.min(bytes.length, 2048);
+    for (var i = 0; i < n; i++) {
+      head += String.fromCharCode(bytes[i]);
+    }
+    var m = head.match(/charset\s*=\s*​["']?\s*​([A-Za-z0-9_\-]+)/i);
+    var charset = m ? m[1] : 'utf-8';
+
+    try {
+      // ブラウザの TextDecoder は iso-2022-jp / shift_jis などに対応している
+      return new TextDecoder(charset).decode(bytes);
+    } catch (e) {
+      // 未知の文字コードだった場合は UTF-8 として読む
+      return new TextDecoder('utf-8').decode(bytes);
+    }
   }
 
   function getFieldType(fieldProperty) {
@@ -453,9 +488,20 @@
     },
     bat: {
       'extractor': function extractDataViaBat(ds, msgData, fieldProperty, dataTypeExtractor) {
-        var offset = getBlockOffsetAt(msgData, fieldProperty.startBlock);
-        ds.seek(offset);
-        return dataTypeExtractor(ds, fieldProperty);
+        // 改変: 大きいデータは、FAT（BAT）の連鎖をたどって全ブロックをつなぐ（2026-11-18）
+        // 元の処理は開始ブロックから続けて読むだけで、ブロックが離れていると壊れていた
+        var chain = getChainByBlockBig(ds, msgData, fieldProperty.startBlock);
+        var blockSize = msgData.bigBlockSize;
+        var joined = new Uint8Array(chain.length * blockSize);
+
+        for (var i = 0; i < chain.length; i++) {
+          ds.seek(getBlockOffsetAt(msgData, chain[i]));
+          joined.set(ds.readUint8Array(blockSize), i * blockSize);
+        }
+
+        // 最後のブロックには余りがあるので、実際のサイズで切る
+        var localDs = new DataStream(joined.slice(0, fieldProperty.sizeBlock), 0, DataStream.LITTLE_ENDIAN);
+        return dataTypeExtractor(localDs, fieldProperty);
       },
       dataType: {
         'string': function extractSbatString(ds, fieldProperty) {
@@ -506,6 +552,18 @@
     while (nextBlockSmall != CONST.MSG.END_OF_CHAIN) {
       blockChain.push(nextBlockSmall);
       nextBlockSmall = getNextBlockSmall(ds, msgData, nextBlockSmall);
+    }
+    return blockChain;
+  }
+
+  // 改変: 大きいデータのブロックの連鎖を、BAT（FAT）からたどって一覧にする（2026-11-18）
+  function getChainByBlockBig(ds, msgData, startBlock) {
+    var blockChain = [];
+    var nextBlock = startBlock;
+    // 無限ループ防止のため、上限を設ける
+    while (nextBlock != CONST.MSG.END_OF_CHAIN && blockChain.length < 1000000) {
+      blockChain.push(nextBlock);
+      nextBlock = getNextBlock(ds, msgData, nextBlock);
     }
     return blockChain;
   }
