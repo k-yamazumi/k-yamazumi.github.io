@@ -141,6 +141,10 @@
             border-radius: 4px;
             width: 200px;
         }
+        .action-area input[type="text"]::placeholder {
+            color: #a19f9d;
+            opacity: 1;
+        }
         .action-area .pdf-ext {
             color: var(--text-sub);
             font-size: 1rem;
@@ -362,7 +366,7 @@
 
     <!-- 5. PDF作成・保存エリア -->
     <div class="action-area">
-        <input type="text" id="pdf-filename" placeholder="ファイル名" value="MailArchive">
+        <input type="text" id="pdf-filename" placeholder="ここにファイル名を入力">
         <span class="pdf-ext">.pdf</span>
         <button id="btn-create" class="btn-primary" disabled>PDFを作成</button>
     </div>
@@ -842,6 +846,7 @@
         resetRow.classList.add('hidden');
         btnCreate.disabled = true;
         fileInput.value = '';
+        pdfFilename.value = '';
 
         // 印刷用の表示をクリア
         renderContainer.innerHTML = '';
@@ -968,9 +973,14 @@
         await waitForImages(renderContainer);
         await nextFrame();
 
+        // 空欄のまま作成した場合は「MailArchive」を入力欄にも入れ、利用者に見えるようにする
+        if (!pdfFilename.value.trim()) {
+            pdfFilename.value = 'MailArchive';
+        }
+
         // 入力欄の値をページのタイトルにする（Chromeは保存時のファイル名の初期値に使う）
         // Windowsで使えない文字を取り除き、末尾の「.pdf」は二重にならないように削る
-        const fileBase = (pdfFilename.value || '')
+        const fileBase = pdfFilename.value
             .replace(/[\\/:*?"<>|]/g, '')
             .replace(/\.pdf$/i, '')
             .trim() || 'MailArchive';
