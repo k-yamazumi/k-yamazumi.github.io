@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg">
     <title>メール一括PDF変換</title>
 
     <!-- =========================================
          ライブラリ
          ※ 読み込めなかった場合は onerror でアラートを出す
     ========================================= -->
-    <script src="./html2pdf.bundle.min.js"
-            onerror="alert('html2pdf.bundle.min.js が同じフォルダに見つかりません。')"></script>
     <script type="module">
         import PostalMime from 'https://cdn.jsdelivr.net/npm/postal-mime@4.2.1/dist/esm/postal-mime.js';
         window.PostalMime = PostalMime;
@@ -134,13 +133,6 @@
             padding-top: 20px;
             border-top: 1px solid var(--border);
         }
-        .action-area input[type="text"] {
-            padding: 8px;
-            font-size: 1rem;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            width: 200px;
-        }
         .btn-primary {
             background-color: var(--primary);
             color: white;
@@ -181,7 +173,7 @@
             right: 0;
             bottom: 0;
             overflow-y: auto;
-            background: #525659;
+            background: #fff;
             z-index: 100;
             padding-bottom: 40px;
         }
@@ -194,10 +186,23 @@
             gap: 12px;
             padding: 10px 16px;
             background: #323130;
-            color: #fff;
+            color: var(--text-main);
+            border-bottom: 1px solid var(--border);
         }
-        #progress-text { flex: 1; color: #fff; font-size: 0.9rem; }
-        #pdf-screen .progress-container { margin: 0; border-radius: 0; }
+
+        /* 上部バーのメッセージ（右側の印刷ボタンとの間を広げる） */
+        #message-text { flex: 1; color: #fff; font-size: 0.9rem; }
+
+        /* 印刷ボタン（プリンターマーク） */
+        .btn-print {
+            background: #fff;
+            color: var(--primary);
+            border: 1px solid #fff;
+            padding: 6px 12px;
+            font-size: 1.1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
 
         .btn-home {
             background: #fff;
@@ -219,10 +224,15 @@
 
         /* 1メール分のページ */
         .pdf-page {
-            padding: 30px;
+            padding: 20px 30px;
+            margin: 0 4px 16px 4px;
             background: #fff;
+            border: 2px solid #5b6f85;
+            border-radius: 12px;
             color: #000;
             font-family: 'Segoe UI', Meiryo, sans-serif;
+            -webkit-box-decoration-break: slice;
+            box-decoration-break: slice;
         }
         .pdf-header {
             border-bottom: 2px solid #ccc;
@@ -252,6 +262,50 @@
             border-top: 1px dashed #ccc;
             font-size: 0.9rem;
             color: #555;
+        }
+
+        /* =========================================
+           印刷用CSS（ブラウザの印刷＝PDF保存に使われる部分）
+        ========================================= */
+        @page {
+            size: A4;
+            margin: 12mm;   /* 用紙の余白（ヘッダー・フッターは出さない設定は、ブラウザの印刷ダイアログ側で行う） */
+        }
+        @media print {
+            /* 画面用の背景・余白・固定位置を消す */
+            body { background: #fff; padding: 0; }
+            #main-screen { display: none !important; }
+
+            /* 固定表示のままだと、印刷で全ページに繰り返されてしまうため、通常の配置に戻す */
+            #pdf-screen { position: static; background: #fff; padding: 0; overflow: visible; }
+            #pdf-render-container { width: auto; margin: 0; }
+
+            /* 操作用の部分（上部バー・印刷ボタン）は印刷に含めない */
+            .no-print { display: none !important; }
+
+            /* 色を印刷する（背景色が消えないようにする） */
+            * {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            /* 文字・画像・表の行は、ページの途中で切れないようにする */
+            .pdf-body p,
+            .pdf-body div,
+            .pdf-body tr,
+            .pdf-body img,
+            .pdf-body li,
+            .pdf-meta .meta-row {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+
+            /* 件名や見出しだけが次の行と分かれないよう、直後で切れないようにする */
+            .pdf-header,
+            .pdf-subject {
+                break-after: avoid;
+                page-break-after: avoid;
+            }
         }
     </style>
 </head>
@@ -296,8 +350,6 @@
 
     <!-- 5. PDF作成・保存エリア -->
     <div class="action-area">
-        <input type="text" id="pdf-filename" placeholder="出力ファイル名" value="MailArchive">
-        <span>.pdf</span>
         <button id="btn-create" class="btn-primary" disabled>PDFを作成</button>
     </div>
 </div>
@@ -306,16 +358,14 @@
      画面2：PDF作成表示（全画面・PDF作成時のみ表示）
 ========================================= -->
 <div id="pdf-screen" style="display:none;">
-    <!-- 上部バー（PDFには含まない） -->
-    <div class="pdf-topbar">
+    <!-- 上部バー（印刷には含まない） -->
+    <div class="pdf-topbar no-print">
         <button id="btn-home" class="btn-home">← ホームに戻る</button>
-        <div id="progress-text">処理中...</div>
+        <div id="message-text">印刷ダイアログからPDFで保存してください</div>
+        <!-- 印刷をキャンセルした場合に、もう一度開くためのボタン -->
+        <button id="btn-print" class="btn-print" title="印刷">🖨️</button>
     </div>
-    <!-- 進捗バー（PDFには含まない） -->
-    <div class="progress-container" id="progress-container">
-        <div class="progress-bar" id="progress-bar"></div>
-    </div>
-    <!-- PDFに写る部分（この中だけがPDFになる） -->
+    <!-- 印刷に写る部分（この中だけがPDFになる） -->
     <div id="pdf-render-container"></div>
 </div>
 
@@ -338,12 +388,9 @@
     const resetRow = document.getElementById('reset-row');
     const btnReset = document.getElementById('btn-reset');
     const listArea = document.getElementById('list-area');
-    const pdfFilename = document.getElementById('pdf-filename');
     const btnCreate = document.getElementById('btn-create');
     const btnHome = document.getElementById('btn-home');
-    const progressContainer = document.getElementById('progress-container');
-    const progressBar = document.getElementById('progress-bar');
-    const progressText = document.getElementById('progress-text');
+    const btnPrint = document.getElementById('btn-print');
     const renderContainer = document.getElementById('pdf-render-container');
 
     // =========================================
@@ -376,10 +423,11 @@
     // 並び順を変えたら一覧を再描画
     settingSort.addEventListener('change', renderList);
 
-    // リセット・ホームに戻る・PDF作成
+    // リセット・ホームに戻る・PDF作成・プリントボタン
     btnReset.addEventListener('click', resetAll);
     btnHome.addEventListener('click', resetAll);
     btnCreate.addEventListener('click', generatePDF);
+    btnPrint.addEventListener('click', () => window.print());
 
     // =========================================
     // ファイル読み込み（進捗表示つき）
@@ -779,12 +827,8 @@
         btnCreate.disabled = true;
         fileInput.value = '';
 
-        // PDF作成表示をクリアし、進捗も初期化
+        // 印刷用の表示をクリア
         renderContainer.innerHTML = '';
-        progressContainer.style.display = 'none';
-        progressBar.style.width = '0%';
-        progressBar.style.backgroundColor = '#107c41';
-        progressText.textContent = '処理中...';
 
         // 画面1へ戻す
         pdfScreen.style.display = 'none';
@@ -878,97 +922,38 @@
         return page;
     }
 
-    // 撮影したキャンバスをA4の高さで分割し、各スライスを新しいページとして追加する
-    function appendCanvasToPdf(pdf, canvas) {
-        const pageW = pdf.internal.pageSize.getWidth();
-        const pageH = pdf.internal.pageSize.getHeight();
-        const ratio = pageW / canvas.width;        // キャンバスのpx → PDFのpt
-        const sliceH = Math.floor(pageH / ratio);  // 1ページに入るキャンバスのpx数
-
-        let y = 0;
-        while (y < canvas.height) {
-            const h = Math.min(sliceH, canvas.height - y);
-            const slice = document.createElement('canvas');
-            slice.width = canvas.width;
-            slice.height = h;
-            slice.getContext('2d').drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
-            pdf.addPage();
-            pdf.addImage(slice.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, pageW, h * ratio);
-            y += h;
-        }
-    }
-
+    // =========================================
+    // 印刷（PDF保存）の準備と実行
+    // =========================================
+    // 1. 全メールを1つの表示エリアに並べる（1メール＝1つの枠）
+    // 2. 描画と画像の読み込みが終わるまで待つ
+    // 3. 印刷ダイアログを自動で開く（利用者が「PDFに保存」を選ぶ）
     async function generatePDF() {
         if (parsedEmails.length === 0) return;
 
-        if (typeof html2pdf === 'undefined') {
-            alert('PDF作成ライブラリ(html2pdf.bundle.min.js)が読み込めませんでした。');
-            return;
-        }
-
-        // 1. 全画面のPDF作成表示に切り替え
+        // 画面をPDF作成表示に切り替える
         btnCreate.disabled = true;
-        btnHome.disabled = true;
         mainScreen.style.display = 'none';
         pdfScreen.style.display = 'block';
         window.scrollTo(0, 0);
-        progressContainer.style.display = 'block';
-        progressBar.style.width = '0%';
-        progressBar.style.backgroundColor = '#107c41';
-        progressText.textContent = 'PDFデザインを構築中...';
 
-        // 2. メールごとのページを表示エリアに並べる
+        // 全メールを順に並べる
         renderContainer.innerHTML = '';
         const showImage = settingImage.checked;
-        const pages = parsedEmails.map(email => buildPageElement(email, showImage));
-        pages.forEach(p => renderContainer.appendChild(p));
+        parsedEmails
+            .map(email => buildPageElement(email, showImage))
+            .forEach(page => renderContainer.appendChild(page));
+
+        // 描画と画像の読み込みが終わってから印刷ダイアログを開く
         await nextFrame();
         await waitForImages(renderContainer);
+        await nextFrame();
 
-        const inputName = document.getElementById('pdf-filename').value.trim() || 'MailArchive';
-        const filename = `${inputName}.pdf`;
+        window.print();
 
-        const commonOpt = {
-            margin: 0,
-            image: { type: 'jpeg', quality: 0.95 },
-            html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff' },
-            jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' }
-        };
-
-        try {
-            // 空のPDFを作成（先頭に空白ページが1枚できるため、最後に削除する）
-            const emptyDiv = document.createElement('div');
-            emptyDiv.textContent = ' ';
-            const pdf = await html2pdf().set(commonOpt).from(emptyDiv).toPdf().get('pdf');
-
-            for (let i = 0; i < pages.length; i++) {
-                progressText.textContent = `PDF作成中... (${i + 1}/${pages.length})`;
-                progressBar.style.width = `${(i / pages.length) * 100}%`;
-                await nextFrame();
-
-                // 全メールを同じ方式で撮影し、A4の高さで分割して追加する
-                const canvas = await html2pdf().set(commonOpt).from(pages[i].cloneNode(true)).toCanvas().get('canvas');
-                appendCanvasToPdf(pdf, canvas);
-            }
-
-            // 先頭の空白ページを削除
-            if (pdf.getNumberOfPages() > 1) pdf.deletePage(1);
-
-            progressText.textContent = 'ダウンロード中...';
-            pdf.save(filename);
-            progressBar.style.width = '100%';
-            progressText.textContent = 'ダウンロードが完了しました！';
-        } catch (err) {
-            console.error(err);
-            progressBar.style.backgroundColor = '#d13438';
-            progressText.textContent = 'PDFの生成中にエラーが発生しました（F12のコンソールを確認）';
-        } finally {
-            // PDF作成表示は残し、「ホームに戻る」で戻れるようにする
-            btnHome.disabled = false;
-            btnCreate.disabled = false;
-        }
+        // 印刷ダイアログが閉じた後も、もう一度ボタンで開けるようにしておく
+        btnCreate.disabled = false;
     }
-
 
     // =========================================
     // ユーティリティ関数
