@@ -133,6 +133,18 @@
             padding-top: 20px;
             border-top: 1px solid var(--border);
         }
+        /* ファイル名入力欄（[ 入力 ].pdf の形） */
+        .action-area input[type="text"] {
+            padding: 8px;
+            font-size: 1rem;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            width: 200px;
+        }
+        .action-area .pdf-ext {
+            color: var(--text-sub);
+            font-size: 1rem;
+        }
         .btn-primary {
             background-color: var(--primary);
             color: white;
@@ -350,6 +362,8 @@
 
     <!-- 5. PDF作成・保存エリア -->
     <div class="action-area">
+        <input type="text" id="pdf-filename" placeholder="ファイル名" value="MailArchive">
+        <span class="pdf-ext">.pdf</span>
         <button id="btn-create" class="btn-primary" disabled>PDFを作成</button>
     </div>
 </div>
@@ -389,6 +403,8 @@
     const btnReset = document.getElementById('btn-reset');
     const listArea = document.getElementById('list-area');
     const btnCreate = document.getElementById('btn-create');
+    const pdfFilename = document.getElementById('pdf-filename');
+    const originalTitle = document.title;
     const btnHome = document.getElementById('btn-home');
     const btnPrint = document.getElementById('btn-print');
     const renderContainer = document.getElementById('pdf-render-container');
@@ -830,6 +846,9 @@
         // 印刷用の表示をクリア
         renderContainer.innerHTML = '';
 
+        // タイトルをもとに戻す
+        document.title = originalTitle;
+
         // 画面1へ戻す
         pdfScreen.style.display = 'none';
         mainScreen.style.display = 'block';
@@ -948,6 +967,14 @@
         await nextFrame();
         await waitForImages(renderContainer);
         await nextFrame();
+
+        // 入力欄の値をページのタイトルにする（Chromeは保存時のファイル名の初期値に使う）
+        // Windowsで使えない文字を取り除き、末尾の「.pdf」は二重にならないように削る
+        const fileBase = (pdfFilename.value || '')
+            .replace(/[\\/:*?"<>|]/g, '')
+            .replace(/\.pdf$/i, '')
+            .trim() || 'MailArchive';
+        document.title = fileBase;
 
         window.print();
 
