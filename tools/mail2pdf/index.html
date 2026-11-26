@@ -123,6 +123,31 @@
         .list-subject { font-weight: bold; }
         .list-date { color: var(--text-sub); font-size: 0.9rem; }
 
+        /* 解析中の進捗エリア（リストの上側） */
+        .analyze-area { padding: 10px 15px; margin-bottom: 12px; color: #666; }
+
+        /* 件数表示（リストの枠の左上・スクロールしても上に固定） */
+        .list-count {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #fff;
+            padding: 4px 15px;
+            font-size: 0.8rem;
+            color: var(--text-sub);
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* 読み込み失敗の枠（一覧とは別） */
+        .error-area {
+            margin-bottom: 20px;
+            padding: 10px 15px;
+            border: 1px solid #d13438;
+            border-radius: 6px;
+            background: #fff;
+        }
+        .error-area h3 { color: #d13438; margin: 4px 0 8px; font-size: 1rem; }
+
         /* ---------- PDF作成エリア ---------- */
         .action-area {
             display: flex;
@@ -361,8 +386,19 @@
         <button id="btn-reset" class="btn-reset">読み込みをリセット</button>
     </div>
 
-    <!-- 4. メール一覧（読み込み後に表示・高さ固定でスクロール） -->
+    <!-- 4-a. 解析中の進捗（リストの上側に表示） -->
+    <div class="analyze-area hidden" id="analyze-area">
+        <div id="analyze-text"></div>
+        <div class="progress-container" id="analyze-progress" style="display:block; margin-top:6px;">
+            <div class="progress-bar" id="analyze-bar"></div>
+        </div>
+    </div>
+
+    <!-- 4-b. メール一覧（読み込み後に表示・高さ固定でスクロール） -->
     <div class="list-area hidden" id="list-area"></div>
+
+    <!-- 4-c. 読み込みに失敗したファイル（一覧とは別の枠） -->
+    <div class="error-area hidden" id="error-area"></div>
 
     <!-- 5. PDF作成・保存エリア -->
     <div class="action-area">
@@ -404,6 +440,8 @@
     const settingImage = document.getElementById('setting-image');
     const settingSort = document.getElementById('setting-sort');
     const resetRow = document.getElementById('reset-row');
+    const analyzeArea = document.getElementById('analyze-area');
+    const errorArea = document.getElementById('error-area');
     const btnReset = document.getElementById('btn-reset');
     const listArea = document.getElementById('list-area');
     const btnCreate = document.getElementById('btn-create');
@@ -457,21 +495,16 @@
         if (files.length === 0) return;
         const total = files.length;
 
-        // 読み込みを始めたタイミングで一覧とリセットボタンを表示
-        listArea.classList.remove('hidden');
+        // 読み込み開始時はリストとエラー枠を隠し、進捗だけをリストの上に出す
         resetRow.classList.remove('hidden');
+        listArea.classList.add('hidden');
+        errorArea.classList.add('hidden');
         btnCreate.disabled = true;
 
-        // 進捗表示（件数テキスト＋進捗バー）
-        listArea.innerHTML = `
-            <div class="analyze-box">
-                <div id="analyze-text">解析中... (0/${total})</div>
-                <div class="progress-container" style="display:block; margin-top:8px;">
-                    <div class="progress-bar" id="analyze-bar"></div>
-                </div>
-            </div>`;
+        analyzeArea.classList.remove('hidden');
         const analyzeText = document.getElementById('analyze-text');
         const analyzeBar = document.getElementById('analyze-bar');
+        analyzeBar.style.width = '0%';
 
         for (let i = 0; i < total; i++) {
             const file = files[i];
@@ -502,6 +535,7 @@
         }
 
         analyzeBar.style.width = '100%';
+        analyzeArea.classList.add('hidden');   // 解析が終わったら進捗を隠す
         renderList();
         btnCreate.disabled = parsedEmails.length === 0;
 
@@ -517,8 +551,9 @@
     function getHeaderValue(headers, key) {
         const lines = headers.split(/\r?\n/);
         const values = [];
+        const keyLower = key.toLowerCase();
         lines.forEach((line, i) => {
-            if (!line.startsWith(key)) return;
+            if (!line.toLowerCase().startsWith(keyLower)) return;
             let value = line.slice(key.length);
             // 次の行が空白で始まる場合は、折り返された続きとして連結する
             for (let j = i + 1; j < lines.length && /^[ \t]/.test(lines[j]); j++) {
@@ -615,6 +650,7 @@
             date: (d && !isNaN(d)) ? d : new Date(0),
             from: formatAddress(parsed.from) || '(不明)',
             to: formatAddress(parsed.to),
+            cc: formatAddress(parsed.cc),
             bodyHtml: parsed.html || nl2br(escapeHtml(parsed.text || '')),
             attachments: (parsed.attachments || []).map(a => a.filename || '不明なファイル')
         };
@@ -795,11 +831,25 @@
 
     function renderList() {
         listArea.innerHTML = '';
-        if (parsedEmails.length === 0 && errorFiles.length === 0) return;
+        errorArea.innerHTML = '';
+        errorArea.classList.add('hidden');
+
+        // 読み込めたものも失敗したものも無ければ、枠ごと隠す
+        if (parsedEmails.length === 0 && errorFiles.length === 0) {
+            listArea.classList.add('hidden');
+            return;
+        }
+        listArea.classList.remove('hidden');
 
         // 並び順（昇順・降順）
         const sortOrder = settingSort.value;
         parsedEmails.sort((a, b) => sortOrder === 'asc' ? a.date - b.date : b.date - a.date);
+
+        // 枠の左上に読み込めた件数を小さく表示
+        const count = document.createElement('div');
+        count.className = 'list-count';
+        count.textContent = `読み込み件数: ${parsedEmails.length}件`;
+        listArea.appendChild(count);
 
         // 読み込めたメール
         parsedEmails.forEach(email => {
@@ -814,13 +864,13 @@
             listArea.appendChild(div);
         });
 
-        // 読み込みに失敗したファイルと理由
+        // 読み込みに失敗したファイルは、別の枠に表示
         if (errorFiles.length > 0) {
+            errorArea.classList.remove('hidden');
+
             const title = document.createElement('h3');
-            title.style.color = '#d13438';
-            title.style.margin = '20px 15px 10px';
             title.textContent = '読み込みに失敗したファイル (スキップされました)';
-            listArea.appendChild(title);
+            errorArea.appendChild(title);
 
             errorFiles.forEach(err => {
                 const div = document.createElement('div');
@@ -828,7 +878,7 @@
                 div.innerHTML = `
                     <div class="list-subject">${escapeHtml(err.name)}</div>
                     <div class="list-date">理由: ${escapeHtml(err.reason)}</div>`;
-                listArea.appendChild(div);
+                errorArea.appendChild(div);
             });
         }
     }
@@ -843,6 +893,9 @@
         // 読み込み画面を初期状態に戻す
         listArea.innerHTML = '';
         listArea.classList.add('hidden');
+        errorArea.innerHTML = '';
+        errorArea.classList.add('hidden');
+        analyzeArea.classList.add('hidden');
         resetRow.classList.add('hidden');
         btnCreate.disabled = true;
         fileInput.value = '';
@@ -918,7 +971,7 @@
         // 添付ファイルは名前のみ表示
         let attachmentsHtml = '';
         if (email.attachments && email.attachments.length > 0) {
-            const names = email.attachments.map(a => `📎 ${escapeHtml(a)}`).join('<br>');
+            const names = email.attachments.map(a => `📄 ${escapeHtml(a)}`).join('<br>');
             attachmentsHtml = `
                 <div class="pdf-attachments">
                     <strong>添付ファイル:</strong><br>
